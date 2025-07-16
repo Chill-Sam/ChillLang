@@ -13,6 +13,7 @@ ASTNode *parse_expr_stmt(void);
 ASTNode *parse_assign_stmt(void);
 ASTNode *parse_expression(void);
 ASTNode *parse_add_expr(void);
+ASTNode *parse_mul_expr(void);
 ASTNode *parse_primary(void);
 ASTNode *parse_call_expr(void);
 ASTNode *parse_arg_list(void);

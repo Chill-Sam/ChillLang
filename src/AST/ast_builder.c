@@ -108,6 +108,35 @@ ASTNode *ast_make_add_expr(ASTNode *lhs, ASTNode *rhs, int line, int column) {
     return e;
 }
 
+// <add_expr> ::= <primary> { "+" <primary> }
+ASTNode *ast_make_sub_expr(ASTNode *lhs, ASTNode *rhs, int line, int column) {
+    ASTNode *e = ast_new(AST_SUB_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_mul_expr(ASTNode *lhs, ASTNode *rhs, int line, int column) {
+    ASTNode *e = ast_new(AST_MUL_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_div_expr(ASTNode *lhs, ASTNode *rhs, int line, int column) {
+    ASTNode *e = ast_new(AST_DIV_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_mod_expr(ASTNode *lhs, ASTNode *rhs, int line, int column) {
+    ASTNode *e = ast_new(AST_MOD_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
 // <call_expr> ::= <identifier> "(" [ <arg_list> ] ")"
 ASTNode *ast_make_call_expr(ASTNode *fn,
                             ASTNode *arg_list,  // may be NULL

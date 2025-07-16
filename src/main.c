@@ -26,8 +26,19 @@ int main(int argc, char *argv[]) {
     // }
 
     ASTNode *program = parse_program();
+
+    if (lex_errors != 0 || parse_errors != 0) {
+        return -1;
+    }
+
     ast_dump(program);
+
     semantic_check(program);
+
+    if (semantic_error_count != 0) {
+        return -1;
+    }
+
     ast_dump(program);
 
     IRProgram pr = {0};
@@ -47,22 +58,7 @@ int main(int argc, char *argv[]) {
         ir_safe_write("  leave\n", 8);
         ir_safe_write("  ret\n", 6);
     }
-    // Emit our own _start:
-    ir_safe_write("\n.section .text\n", 16);
-    ir_safe_write(".global _start\n", 15);
-    ir_safe_write("_start:\n", 8);
 
-    // call main
-    ir_safe_write("  call main\n", 12);
-
-    // move main’s return (in RAX) → RDI
-    ir_safe_write("  mov  %rax, %rdi\n", 18);
-
-    // syscall number for exit is 60
-    ir_safe_write("  mov  $60, %rax\n", 17);
-
-    // do the syscall
-    ir_safe_write("  syscall\n", 10);
-
+    emit_start();
     return 0;
 }

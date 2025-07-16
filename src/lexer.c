@@ -15,6 +15,8 @@ static int lookahead_count = 0;
 
 static Token lex_one_token(void);  // core lexing logic
 
+int parse_errors = 0;
+
 // Will lex a number starting at current location in input stream
 // Returns a Token based on number
 // Assumes currently starting on a number literal
@@ -175,6 +177,15 @@ Token lex_char(void) {
         case '-':
             tok.type = TOKEN_MINUS;
             break;
+        case '*':
+            tok.type = TOKEN_STAR;
+            break;
+        case '/':
+            tok.type = TOKEN_SLASH;
+            break;
+        case '%':
+            tok.type = TOKEN_PERCENT;
+            break;
         case '=':
             tok.type = TOKEN_EQUALS;
             break;
@@ -239,6 +250,7 @@ Token lex_word(void) {
 }
 
 int lex_init(const char *filename) {
+    parse_errors = 0;
     lookahead_count = 0;
     return init_stream(filename);  // your existing init_stream()
 }
@@ -309,6 +321,7 @@ static int accept(enum TokenType t) {
 static Token expect(enum TokenType t) {
     Token tk = next_token();
     if (tk.type != t) {
+        parse_errors++;
         write(STDOUT_FILENO, "Unexpected token\n", 17);
         output_token(tk);
     }

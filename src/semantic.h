@@ -26,5 +26,6 @@ static void check_assign(ASTNode *assign, SemanticContext *ctx);
 
 static ASTNode *check_expr(ASTNode *expr, SemanticContext *ctx);
 static ASTNode *check_add_expr(ASTNode *add_expr, SemanticContext *ctx);
+static ASTNode *check_mul_expr(ASTNode *mul_expr, SemanticContext *ctx);
 static ASTNode *check_primary(ASTNode *primary, SemanticContext *ctx);
 static ASTNode *check_call_expr(ASTNode *expr, SemanticContext *ctx);

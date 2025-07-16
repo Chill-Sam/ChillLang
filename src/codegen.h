@@ -26,3 +26,10 @@ static void build_slots_for_function(const IRFunction *fn);
 
 void emit_prologue(const IRFunction *fn);
 static void lower_inst_to_asm(const IRInst *i);
+
+static void lower_ir_const(const IRInst *i);
+static void emit_load(Type *type);
+static void emit_store(Type *type);
+static void load_stack_to_reg(const char *from, const char *dst, Type *type);
+static void load_reg_to_stack(Type *type, const char *dst);
+static void emit_start(void);

@@ -131,201 +131,155 @@ static void lower_inst_to_asm(const IRInst *i) {
             int idx = find_slot(i->dst);
             if (idx < 0) write(STDOUT_FILENO, "ERR SLOT\n", 9);
             off = slot_table[idx].offset;
-            if (t->size == 1) {
-                // 8-bit immediate
-                ir_safe_write("  movb  $", 9);
-            } else if (t->size == 2) {
-                // 16-bit immediate
-                ir_safe_write("  movw  $", 9);
-            } else if (t->size == 4) {
-                // 32-bit immediate
-                ir_safe_write("  movl  $", 9);
-            } else {
-                // 64-bit immediate
-                ir_safe_write("  movq  $", 9);
-            }
+
+            emit_store(t);
+
+            ir_safe_write("$", 1);
             ir_safe_write(i->arg1, ir_str_len(i->arg1));
             ir_safe_write(", -", 3);
             print_int(off);
             ir_safe_write("(%rbp)\n", 7);
             break;
         }
-        case IR_LOAD: {
-            int idx = find_slot(i->arg1);
-            if (idx < 0) write(STDOUT_FILENO, "ERR SLOT\n", 9);
-            off = slot_table[idx].offset;
 
-            int dst_idx = find_slot(i->dst);
-            if (dst_idx < 0) write(STDOUT_FILENO, "IR_LOAD: bad dst\n", 17);
-            int dst_off = slot_table[dst_idx].offset;
-
-            if (t->kind == TY_UINT && t->size == 1) {
-                // zero-extend byte
-                ir_safe_write("  movzbq -", 10);
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
-            } else if (t->kind == TY_INT && t->size == 1) {
-                // sign-extend byte
-                ir_safe_write("  movsbq -", 10);
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
-            } else if (t->size == 2) {
-                // 16-bit: sign- or zero-extend?
-                if (t->kind == TY_UINT) {
-                    ir_safe_write("  movzwq -", 10);
-                } else {
-                    ir_safe_write("  movswq -", 10);
-                }
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
-            } else if (t->size == 4) {
-                // 32-bit; movl zero-extends into RAX
-                ir_safe_write("  movl  -", 9);
-                print_int(off);
-                ir_safe_write("(%rbp), %eax\n", 13);
-            } else {
-                // 64-bit
-                ir_safe_write("  movq  -", 9);
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
-            }
-
-            if (t->size == 1) {
-                ir_safe_write("  movb  %al, -", 14);
-            } else if (t->size == 2) {
-                ir_safe_write("  movw  %ax, -", 14);
-            } else if (t->size == 4) {
-                ir_safe_write("  movl  %eax, -", 15);
-            } else {
-                ir_safe_write("  movq  %rax, -", 15);
-            }
-
-            print_int(dst_off);
-            ir_safe_write("(%rbp)\n", 7);
-            break;
-        }
+        case IR_LOAD:
         case IR_STORE: {
-            // first load the value into a register
-            int idx = find_slot(i->arg1);
-            if (idx < 0) write(STDOUT_FILENO, "ERR SLOT\n", 9);
-            off = slot_table[idx].offset;
-            if (t->kind == TY_UINT && t->size == 1) {
-                ir_safe_write("  movzbq -", 10);
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
-            } else if (t->kind == TY_INT && t->size == 1) {
-                ir_safe_write("  movsbq -", 10);
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
-            } else if (t->size == 2) {
-                if (t->kind == TY_UINT) {
-                    ir_safe_write("  movzwq -", 10);
-                } else {
-                    ir_safe_write("  movswq -", 10);
-                }
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
-            } else if (t->size == 4) {
-                ir_safe_write("  movl  -", 9);
-                print_int(off);
-                ir_safe_write("(%rbp), %eax\n", 13);
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg1, "%eax", t);
             } else {
-                ir_safe_write("  movq  -", 9);
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
+                load_stack_to_reg(i->arg1, "%rax", t);
             }
-            // then store into the destination
-            idx = find_slot(i->arg2);
-            if (idx < 0) write(STDOUT_FILENO, "ERR SLOT\n", 9);
-            off = slot_table[idx].offset;
-            if (t->size == 1) {
-                ir_safe_write("  movb  %al, -", 14);
-            } else if (t->size == 2) {
-                ir_safe_write("  movw  %ax, -", 14);
-            } else if (t->size == 4) {
-                ir_safe_write("  movl  %eax, -", 15);
-            } else {
-                ir_safe_write("  movq  %rax, -", 15);
-            }
-            print_int(off);
-            ir_safe_write("(%rbp)\n", 7);
+
+            load_reg_to_stack(t, i->dst);
             break;
         }
-        case IR_ADD: {
-            // load left operand
-            int idx = find_slot(i->arg1);
-            if (idx < 0) write(STDOUT_FILENO, "ERR SLOT\n", 9);
-            off = slot_table[idx].offset;
 
-            if (t->kind == TY_UINT && t->size == 1) {
-                // zero-extend byte
-                ir_safe_write("  movzbq -", 10);
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
-            } else if (t->kind == TY_INT && t->size == 1) {
-                // sign-extend byte
-                ir_safe_write("  movsbq -", 10);
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
-            } else if (t->size == 2) {
-                // 16-bit: sign- or zero-extend?
-                if (t->kind == TY_UINT) {
-                    ir_safe_write("  movzwq -", 10);
-                } else {
-                    ir_safe_write("  movswq -", 10);
-                }
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
-            } else if (t->size == 4) {
-                // 32-bit; movl zero-extends into RAX
-                ir_safe_write("  movl  -", 9);
-                print_int(off);
-                ir_safe_write("(%rbp), %eax\n", 13);
+        case IR_ADD: {
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg1, "%eax", t);
             } else {
-                // 64-bit
-                ir_safe_write("  movq  -", 9);
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
+                load_stack_to_reg(i->arg1, "%rax", t);
             }
 
-            // add right operand
-            idx = find_slot(i->arg2);
-            if (idx < 0) write(STDOUT_FILENO, "ERR SLOT\n", 9);
-            off = slot_table[idx].offset;
-            if (t->size == 1) {
-                ir_safe_write("  addb  -", 9);
-                print_int(off);
-                ir_safe_write("(%rbp), %al\n", 12);
-            } else if (t->size == 2) {
-                ir_safe_write("  addw  -", 9);
-                print_int(off);
-                ir_safe_write("(%rbp), %ax\n", 12);
-            } else if (t->size == 4) {
-                ir_safe_write("  addl  -", 9);
-                print_int(off);
-                ir_safe_write("(%rbp), %eax\n", 13);
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg2, "%ecx", t);
             } else {
-                ir_safe_write("  addq  -", 9);
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
+                load_stack_to_reg(i->arg2, "%rcx", t);
+            }
+
+            ir_safe_write("  addq %rcx, %rax\n", 18);
+
+            load_reg_to_stack(t, i->dst);
+            break;
+        }
+
+        case IR_SUB: {
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg1, "%eax", t);
+            } else {
+                load_stack_to_reg(i->arg1, "%rax", t);
+            }
+
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg2, "%ecx", t);
+            } else {
+                load_stack_to_reg(i->arg2, "%rcx", t);
+            }
+
+            ir_safe_write("  subq %rcx, %rax\n", 18);
+
+            load_reg_to_stack(t, i->dst);
+            break;
+        }
+
+        case IR_MUL: {
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg1, "%eax", t);
+            } else {
+                load_stack_to_reg(i->arg1, "%rax", t);
+            }
+
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg2, "%ecx", t);
+            } else {
+                load_stack_to_reg(i->arg2, "%rcx", t);
+            }
+
+            // mul right operand
+            if (t->kind == TY_INT) {
+                // signed multiply (low 64 bits of RAX ← RAX * RCX)
+                ir_safe_write("  imulq %rcx, %rax\n", 19);
+            } else {
+                // unsigned multiply (low 64 bits of RAX ← RAX * RCX)
+                ir_safe_write("  mulq %rcx\n", 12);
             }
 
             // store result
-            idx = find_slot(i->dst);
-            if (idx < 0) write(STDOUT_FILENO, "ERR SLOT\n", 9);
-            off = slot_table[idx].offset;
+            load_reg_to_stack(t, i->dst);
+            break;
+        }
 
-            if (t->size == 1) {
-                ir_safe_write("  movb  %al, -", 14);
-            } else if (t->size == 2) {
-                ir_safe_write("  movw  %ax, -", 14);
-            } else if (t->size == 4) {
-                ir_safe_write("  movl  %eax, -", 15);
+        case IR_DIV: {
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg1, "%eax", t);
             } else {
-                ir_safe_write("  movq  %rax, -", 15);
+                load_stack_to_reg(i->arg1, "%rax", t);
             }
-            print_int(off);
-            ir_safe_write("(%rbp)\n", 7);
+
+            if (t->kind == TY_INT) {
+                // sign-extend RAX into RDX
+                ir_safe_write("  cqo\n", 6);
+            } else {
+                // zero RDX for unsigned
+                ir_safe_write("  xorq %rdx, %rdx\n", 18);
+            }
+
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg2, "%ecx", t);
+            } else {
+                load_stack_to_reg(i->arg2, "%rcx", t);
+            }
+
+            if (t->kind == TY_INT) {
+                ir_safe_write("  idivq %rcx\n", 13);
+            } else {
+                ir_safe_write("  divq %rcx\n", 12);
+            }
+
+            // store result
+            load_reg_to_stack(t, i->dst);
+            break;
+        }
+
+        case IR_REM: {
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg1, "%eax", t);
+            } else {
+                load_stack_to_reg(i->arg1, "%rax", t);
+            }
+
+            if (t->kind == TY_INT) {
+                // sign-extend RAX into RDX
+                ir_safe_write("  cqo\n", 6);
+            } else {
+                // zero RDX for unsigned
+                ir_safe_write("  xorq %rdx, %rdx\n", 18);
+            }
+
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg2, "%ecx", t);
+            } else {
+                load_stack_to_reg(i->arg2, "%rcx", t);
+            }
+
+            if (t->kind == TY_INT) {
+                ir_safe_write("  idivq %rcx\n", 13);
+            } else {
+                ir_safe_write("  divq %rcx\n", 12);
+            }
+            ir_safe_write("  movq %rdx, %rax\n", 18);
+            // store result
+            load_reg_to_stack(t, i->dst);
             break;
         }
 
@@ -346,20 +300,7 @@ static void lower_inst_to_asm(const IRInst *i) {
             ir_safe_write(i->arg1, ir_str_len(i->arg1));
             ir_safe_write("\n", 1);
             // move return value into dst
-            int idx = find_slot(i->dst);
-            if (idx < 0) write(STDOUT_FILENO, "ERR SLOT\n", 9);
-            off = slot_table[idx].offset;
-            if (t->size == 1) {
-                ir_safe_write("  movb  %al, -", 14);
-            } else if (t->size == 2) {
-                ir_safe_write("  movw  %ax, -", 14);
-            } else if (t->size == 4) {
-                ir_safe_write("  movl  %eax, -", 15);
-            } else {
-                ir_safe_write("  movq  %rax, -", 15);
-            }
-            print_int(off);
-            ir_safe_write("(%rbp)\n", 7);
+            load_reg_to_stack(t, i->dst);
             break;
         }
 
@@ -386,4 +327,110 @@ static void lower_inst_to_asm(const IRInst *i) {
             // no action for other ops
             break;
     }
+}
+
+static void lower_ir_const(const IRInst *i) {}
+
+static void emit_load(Type *type) {
+    if (type->kind == TY_INT) {
+        // Used signed instruciton for INT
+        switch (type->size) {
+            case 1:  // 8 bit
+                ir_safe_write("  movsbq ", 9);
+                break;
+            case 2:  // 16 bit
+                ir_safe_write("  movswq ", 9);
+                break;
+            case 4:  // 32 bit
+                ir_safe_write("  movslq ", 9);
+                break;
+            default:  // 64 bit
+                ir_safe_write("  movq ", 7);
+                break;
+        }
+    } else {
+        switch (type->size) {
+            case 1:  // 8 bit
+                ir_safe_write("  movzbq ", 9);
+                break;
+            case 2:  // 16 bit
+                ir_safe_write("  movzwq ", 9);
+                break;
+            case 4:  // 32 bit
+                ir_safe_write("  movl ", 7);
+                break;
+            default:  // 64 bit
+                ir_safe_write("  movq ", 7);
+                break;
+        }
+    }
+}
+
+static void emit_store(Type *type) {
+    switch (type->size) {
+        case 1:
+            ir_safe_write("  movb ", 7);
+            break;
+        case 2:
+            ir_safe_write("  movw ", 7);
+            break;
+        case 4:
+            ir_safe_write("  movl ", 7);
+            break;
+        default:
+            ir_safe_write("  movq ", 7);
+
+            break;
+    }
+}
+
+static void load_stack_to_reg(const char *from, const char *dst, Type *type) {
+    int idx = find_slot(from);
+    if (idx < 0) write(STDOUT_FILENO, "load_stack_to_reg: bad from\n", 28);
+    int off = slot_table[idx].offset;
+
+    emit_load(type);
+    ir_safe_write("-", 1);
+    print_int(off);
+    ir_safe_write("(%rbp), ", 8);
+    ir_safe_write(dst, ir_str_len(dst));
+    ir_safe_write("\n", 1);
+}
+
+static void load_reg_to_stack(Type *type, const char *dst) {
+    if (type->size == 1) {
+        ir_safe_write("  movb  %al, -", 14);
+    } else if (type->size == 2) {
+        ir_safe_write("  movw  %ax, -", 14);
+    } else if (type->size == 4) {
+        ir_safe_write("  movl  %eax, -", 15);
+    } else {
+        ir_safe_write("  movq  %rax, -", 15);
+    }
+
+    int idx = find_slot(dst);
+    if (idx < 0) write(STDOUT_FILENO, "load_reg_to_stack: bad dst\n", 27);
+    int off = slot_table[idx].offset;
+
+    print_int(off);
+    ir_safe_write("(%rbp)\n", 7);
+}
+
+static void emit_start(void) {
+    // Emit our own _start:
+    ir_safe_write("\n.section .text\n", 16);
+    ir_safe_write(".global _start\n", 15);
+    ir_safe_write("_start:\n", 8);
+
+    // call main
+    ir_safe_write("  call main\n", 12);
+
+    // move main’s return (in RAX) → RDI
+    ir_safe_write("  mov  %rax, %rdi\n", 18);
+
+    // syscall number for exit is 60
+    ir_safe_write("  mov  $60, %rax\n", 17);
+
+    // do the syscall
+    ir_safe_write("  syscall\n", 10);
 }

@@ -2,14 +2,29 @@
 
 #include "symtab.h"
 
+int semantic_error_count = 0;
+
+int is_integer_type(ASTNode *type) {
+    return symtab_same_type(type->data.text.name, "u8") ||
+           symtab_same_type(type->data.text.name, "u16") ||
+           symtab_same_type(type->data.text.name, "u32") ||
+           symtab_same_type(type->data.text.name, "u64") ||
+           symtab_same_type(type->data.text.name, "i8") ||
+           symtab_same_type(type->data.text.name, "i16") ||
+           symtab_same_type(type->data.text.name, "i32") ||
+           symtab_same_type(type->data.text.name, "i64");
+}
+
 // Entry point
 void semantic_check(ASTNode *program) {
+    semantic_error_count = 0;
     SemanticContext ctx = {.return_type = NULL};
 
     check_node(program, &ctx);
 }
 
 static void report_error(int line, int col, const char *msg) {
+    semantic_error_count++;
     write(STDOUT_FILENO, "Semantic error: ", 16);
     write(STDOUT_FILENO, msg, str_len(msg));
     write(STDOUT_FILENO, " @ ", 3);
@@ -119,7 +134,9 @@ static void check_decl(ASTNode *decl, SemanticContext *ctx) {
 }
 
 static void check_return(ASTNode *ret, SemanticContext *ctx) {
+    ctx->expected_int_lit_type = ctx->return_type;
     ASTNode *type = check_expr(ret->first_child, ctx);
+    ctx->expected_int_lit_type = NULL;
     if (!symtab_same_type(type->data.text.name,
                           ctx->return_type->data.text.name)) {
         report_error(ret->line, ret->column, "Return type mismatch");
@@ -160,8 +177,16 @@ static void check_assign(ASTNode *assign, SemanticContext *ctx) {
 /* Check expression for semantic errors, returns type of expression */
 static ASTNode *check_expr(ASTNode *expr, SemanticContext *ctx) {
     switch (expr->first_child->kind) {
-        case AST_ADD_EXPR: {
+        case AST_ADD_EXPR:
+        case AST_SUB_EXPR: {
             ASTNode *type = check_add_expr(expr->first_child, ctx);
+            expr->type = type;
+            return type;
+        }
+        case AST_MUL_EXPR:
+        case AST_DIV_EXPR:
+        case AST_MOD_EXPR: {
+            ASTNode *type = check_mul_expr(expr->first_child, ctx);
             expr->type = type;
             return type;
         }
@@ -185,25 +210,77 @@ static ASTNode *check_add_expr(ASTNode *add_expr, SemanticContext *ctx) {
     ASTNode *rh = lh->next_sibling;
 
     ASTNode *lh_type = NULL;
-    if (lh->kind == AST_ADD_EXPR) {
+    if (lh->kind >= AST_ADD_EXPR && lh->kind <= AST_SUB_EXPR) {
         lh_type = check_add_expr(lh, ctx);
+    } else if (lh->kind >= AST_MUL_EXPR && lh->kind <= AST_MOD_EXPR) {
+        lh_type = check_mul_expr(lh, ctx);
     } else {
         lh_type = check_primary(lh, ctx);
     }
 
     ASTNode *rh_type = NULL;
-    if (rh->kind == AST_ADD_EXPR) {
+    if (rh->kind >= AST_ADD_EXPR && rh->kind <= AST_SUB_EXPR) {
         rh_type = check_add_expr(rh, ctx);
+    } else if (rh->kind >= AST_MUL_EXPR && rh->kind <= AST_MOD_EXPR) {
+        rh_type = check_mul_expr(rh, ctx);
     } else {
         rh_type = check_primary(rh, ctx);
     }
 
     if (!symtab_same_type(lh_type->data.text.name, rh_type->data.text.name)) {
         report_error(add_expr->line, add_expr->column,
-                     "Type mismatch in add expression");
+                     "Type mismatch in add_expr");
+    }
+
+    if (!is_integer_type(lh_type) || !is_integer_type(rh_type)) {
+        report_error(add_expr->line, add_expr->column,
+                     "Type doesnt support operator");
     }
 
     add_expr->type = lh_type;
+    return lh_type;
+}
+
+static ASTNode *check_mul_expr(ASTNode *mul_expr, SemanticContext *ctx) {
+    ASTNode *lh = mul_expr->first_child;
+    ASTNode *rh = lh->next_sibling;
+
+    ASTNode *lh_type = NULL;
+    if (lh->kind >= AST_ADD_EXPR && lh->kind <= AST_SUB_EXPR) {
+        lh_type = check_add_expr(lh, ctx);
+    } else if (lh->kind >= AST_MUL_EXPR && lh->kind <= AST_MOD_EXPR) {
+        lh_type = check_mul_expr(lh, ctx);
+    } else {
+        lh_type = check_primary(lh, ctx);
+    }
+
+    ASTNode *rh_type = NULL;
+    if (rh->kind >= AST_ADD_EXPR && rh->kind <= AST_SUB_EXPR) {
+        rh_type = check_add_expr(rh, ctx);
+    } else if (rh->kind >= AST_MUL_EXPR && rh->kind <= AST_MOD_EXPR) {
+        rh_type = check_mul_expr(rh, ctx);
+    } else {
+        rh_type = check_primary(rh, ctx);
+    }
+
+    if (!symtab_same_type(lh_type->data.text.name, rh_type->data.text.name)) {
+        report_error(mul_expr->line, mul_expr->column,
+                     "Type mismatch in mul_expr");
+    }
+
+    if (mul_expr->kind == AST_MOD_EXPR) {
+        if (!is_integer_type(lh_type) || !is_integer_type(rh_type)) {
+            report_error(mul_expr->line, mul_expr->column,
+                         "Modulo only supports integers");
+        }
+    } else {
+        if (!is_integer_type(lh_type) || !is_integer_type(rh_type)) {
+            report_error(mul_expr->line, mul_expr->column,
+                         "Type doesnt support operator");
+        }
+    }
+
+    mul_expr->type = lh_type;
     return lh_type;
 }
 

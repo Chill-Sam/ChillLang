@@ -97,6 +97,78 @@ static char *lower_expr(ASTNode *expr, IRFunction *fn) {
             return temp;
         }
 
+        case AST_SUB_EXPR: {
+            ASTNode *L = expr->first_child;
+            ASTNode *R = L->next_sibling;
+
+            char *lt = lower_expr(L, fn);
+            char *rt = lower_expr(R, fn);
+            char *temp = new_temp();
+            IRInst *inst = make_inst();
+            inst->op = IR_SUB;
+            inst->dst = temp;
+            inst->arg1 = lt;
+            inst->arg2 = rt;
+            Type *type = get_type(expr->type->data.text.name);
+            inst->type = type;
+            ir_emit(fn, inst);
+            return temp;
+        }
+
+        case AST_MUL_EXPR: {
+            ASTNode *L = expr->first_child;
+            ASTNode *R = L->next_sibling;
+
+            char *lt = lower_expr(L, fn);
+            char *rt = lower_expr(R, fn);
+            char *temp = new_temp();
+            IRInst *inst = make_inst();
+            inst->op = IR_MUL;
+            inst->dst = temp;
+            inst->arg1 = lt;
+            inst->arg2 = rt;
+            Type *type = get_type(expr->type->data.text.name);
+            inst->type = type;
+            ir_emit(fn, inst);
+            return temp;
+        }
+
+        case AST_DIV_EXPR: {
+            ASTNode *L = expr->first_child;
+            ASTNode *R = L->next_sibling;
+
+            char *lt = lower_expr(L, fn);
+            char *rt = lower_expr(R, fn);
+            char *temp = new_temp();
+            IRInst *inst = make_inst();
+            inst->op = IR_DIV;
+            inst->dst = temp;
+            inst->arg1 = lt;
+            inst->arg2 = rt;
+            Type *type = get_type(expr->type->data.text.name);
+            inst->type = type;
+            ir_emit(fn, inst);
+            return temp;
+        }
+
+        case AST_MOD_EXPR: {
+            ASTNode *L = expr->first_child;
+            ASTNode *R = L->next_sibling;
+
+            char *lt = lower_expr(L, fn);
+            char *rt = lower_expr(R, fn);
+            char *temp = new_temp();
+            IRInst *inst = make_inst();
+            inst->op = IR_REM;
+            inst->dst = temp;
+            inst->arg1 = lt;
+            inst->arg2 = rt;
+            Type *type = get_type(expr->type->data.text.name);
+            inst->type = type;
+            ir_emit(fn, inst);
+            return temp;
+        }
+
         case AST_CALL_EXPR: {
             ASTNode *id = expr->first_child;
             ASTNode *arglist = id->next_sibling;
@@ -151,7 +223,7 @@ static void lower_stmt(ASTNode *stmt, IRFunction *fn) {
             } else {
                 inst->arg1 = "NULL";
             }
-            inst->arg2 = name->data.text.name;
+            inst->dst = name->data.text.name;
             inst->type =
                 get_type(symtab_find_var(name->data.text.name)->data.text.name);
             ir_emit(fn, inst);
@@ -166,7 +238,7 @@ static void lower_stmt(ASTNode *stmt, IRFunction *fn) {
             IRInst *inst = make_inst();
             inst->op = IR_STORE;
             inst->arg1 = val;
-            inst->arg2 = lhs->data.text.name;
+            inst->dst = lhs->data.text.name;
             inst->type =
                 get_type(symtab_find_var(lhs->data.text.name)->data.text.name);
             ir_emit(fn, inst);

@@ -7,6 +7,8 @@
 #define MAX_LEXEME 64
 #define MAX_ERR_MSG 64
 
+int lex_errors = 0;
+
 enum TokenType {
     // Symbols
     TOKEN_LPAREN,
@@ -16,6 +18,9 @@ enum TokenType {
     TOKEN_SEMI,
     TOKEN_PLUS,
     TOKEN_MINUS,
+    TOKEN_STAR,
+    TOKEN_SLASH,
+    TOKEN_PERCENT,
     TOKEN_COMMA,
     TOKEN_EQUALS,  // 8
 
@@ -70,6 +75,7 @@ typedef struct {
 
 Token make_error_token(int line, int column, const char *text, int text_len,
                        const char *err_msg) {
+    lex_errors++;
     Token tok;
     tok.type = TOKEN_ERROR;
 

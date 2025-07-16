@@ -10,10 +10,11 @@
 
 // If your AST_KIND_COUNT isn’t 15, adjust this array
 static const char *ast_kind_names[] = {
-    "PROGRAM",     "FUNCTION_DEF", "PARAM_LIST", "PARAM",     "BLOCK",
-    "RETURN_STMT", "CONST_DECL",   "MUT_DECL",   "EXPR_STMT", "ASSIGN_STMT",
-    "EXPRESSION",  "ADD_EXPR",     "CALL_EXPR",  "ARG_LIST",  "INT_LITERAL",
-    "IDENTIFIER",  "TYPE_NAME"};
+    "PROGRAM",     "FUNCTION_DEF", "PARAM_LIST", "PARAM",       "BLOCK",
+    "RETURN_STMT", "CONST_DECL",   "MUT_DECL",   "EXPR_STMT",   "ASSIGN_STMT",
+    "EXPRESSION",  "ADD_EXPR",     "SUB_EXPR",   "MUL_EXPR",    "DIV_EXPR",
+    "MOD_EXPR",    "CALL_EXPR",    "ARG_LIST",   "INT_LITERAL", "IDENTIFIER",
+    "TYPE_NAME"};
 
 // compute length of a NUL-terminated string
 inline static int str_len(const char *s) {

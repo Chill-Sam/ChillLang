@@ -178,12 +178,45 @@ ASTNode *parse_expression(void) {
     return expr;
 }
 
-/* <add_expr> ::= <primary> { "+" <primary> } */
+/* <add_expr> ::= <mul_expr> { ( + | - ) <mul_expr> } ; */
 ASTNode *parse_add_expr(void) {
+    ASTNode *lhs = parse_mul_expr();
+    while (peek_token().type == TOKEN_PLUS ||
+           peek_token().type == TOKEN_MINUS) {
+        if (accept(TOKEN_PLUS)) {
+            ASTNode *rhs = parse_mul_expr();
+            lhs = ast_make_add_expr(lhs, rhs, lhs->line, lhs->column);
+        } else if (accept(TOKEN_MINUS)) {
+            ASTNode *rhs = parse_mul_expr();
+            lhs = ast_make_sub_expr(lhs, rhs, lhs->line, lhs->column);
+        } else {
+            write(STDOUT_FILENO, "ERROR PARSING ADD_EXPR\n", 23);
+            return NULL;
+        }
+    }
+
+    return lhs;
+}
+
+/* <mul_expr> ::= <primary> { * | / | % <primary> } ; */
+ASTNode *parse_mul_expr(void) {
     ASTNode *lhs = parse_primary();
-    while (accept(TOKEN_PLUS)) {
-        ASTNode *rhs = parse_primary();
-        lhs = ast_make_add_expr(lhs, rhs, lhs->line, lhs->column);
+    while (peek_token().type == TOKEN_STAR ||
+           peek_token().type == TOKEN_SLASH ||
+           peek_token().type == TOKEN_PERCENT) {
+        if (accept(TOKEN_STAR)) {
+            ASTNode *rhs = parse_primary();
+            lhs = ast_make_mul_expr(lhs, rhs, lhs->line, lhs->column);
+        } else if (accept(TOKEN_SLASH)) {
+            ASTNode *rhs = parse_primary();
+            lhs = ast_make_div_expr(lhs, rhs, lhs->line, lhs->column);
+        } else if (accept(TOKEN_PERCENT)) {
+            ASTNode *rhs = parse_primary();
+            lhs = ast_make_mod_expr(lhs, rhs, lhs->line, lhs->column);
+        } else {
+            write(STDOUT_FILENO, "ERROR PARSING MUL_EXPR\n", 23);
+            return NULL;
+        }
     }
 
     return lhs;
@@ -208,6 +241,7 @@ ASTNode *parse_primary(void) {
         } else {
             write(STDOUT_FILENO, "Error parsing primary\n", 22);
             output_token(peek_nth(2));
+            parse_errors++;
             return NULL;
         }
     }
@@ -231,6 +265,7 @@ ASTNode *parse_primary(void) {
 
     write(STDOUT_FILENO, "Error parsing primary\n", 22);
     output_token(tk);
+    parse_errors++;
     return NULL;
 }
 
