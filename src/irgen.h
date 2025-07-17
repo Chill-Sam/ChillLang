@@ -10,6 +10,7 @@ static int temp_counter = 0;
 static int label_counter = 0;
 
 static char *make_name(char prefix);
+static char *make_var(char *name);
 static char *new_temp(void);
 static char *new_label(void);
 

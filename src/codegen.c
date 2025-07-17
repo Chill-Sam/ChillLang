@@ -64,15 +64,22 @@ static void build_slots_for_function(const IRFunction *fn) {
         if (inst->op == IR_LOAD) {
             const char *v = inst->arg1;
             // if it doesn’t look like a temp (not 't0','t1',…)
-            if (v && v[0] != 't' && find_slot(v) < 0) {
+            if (v && v[0] == 'u' && find_slot(v) < 0) {
                 add_slot(v);
             }
         }
 
         // b) stores into a variable → add that var
         if (inst->op == IR_STORE) {
-            const char *v = inst->arg2;
-            if (v && v[0] != 't' && find_slot(v) < 0) {
+            const char *v = inst->dst;
+            if (v && v[0] == 'u' && find_slot(v) < 0) {
+                add_slot(v);
+            }
+        }
+
+        if (inst->op == IR_CONST) {
+            const char *v = inst->dst;
+            if (v && v[0] == 'u' && find_slot(v) < 0) {
                 add_slot(v);
             }
         }
@@ -305,21 +312,26 @@ static void lower_inst_to_asm(const IRInst *i) {
         }
 
         case IR_RET: {
-            int idx = find_slot(i->arg1);
-            if (idx < 0) write(STDOUT_FILENO, "ERR SLOT\n", 9);
-            off = slot_table[idx].offset;
-            if (t->kind == TY_UINT && t->size < 8) {
-                ir_safe_write("  movzbq -", 10);
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
-            } else if (t->kind == TY_INT && t->size < 8) {
-                ir_safe_write("  movsbq -", 10);
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
+            // int idx = find_slot(i->arg1);
+            // if (idx < 0) write(STDOUT_FILENO, "ERR SLOT\n", 9);
+            // off = slot_table[idx].offset;
+            // if (t->kind == TY_UINT && t->size < 8) {
+            //     ir_safe_write("  movzbq -", 10);
+            //     print_int(off);
+            //     ir_safe_write("(%rbp), %rax\n", 13);
+            // } else if (t->kind == TY_INT && t->size < 8) {
+            //     ir_safe_write("  movsbq -", 10);
+            //     print_int(off);
+            //     ir_safe_write("(%rbp), %rax\n", 13);
+            // } else {
+            //     ir_safe_write("  movq  -", 9);
+            //     print_int(off);
+            //     ir_safe_write("(%rbp), %rax\n", 13);
+            // }
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg1, "%eax", t);
             } else {
-                ir_safe_write("  movq  -", 9);
-                print_int(off);
-                ir_safe_write("(%rbp), %rax\n", 13);
+                load_stack_to_reg(i->arg1, "%rax", t);
             }
             break;
         }

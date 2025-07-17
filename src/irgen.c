@@ -1,9 +1,12 @@
 #include "irgen.h"
 
+#include "AST/ast_arena.c"
 #include "file_stream.c"
 #include "ir.h"
 #include "ir_type.c"
 #include "symtab.h"
+
+ASTNode *name_to_assign = NULL;
 
 static char *make_name(char prefix) {
     char *buf = ast_arena_alloc(16);
@@ -14,6 +17,21 @@ static char *make_name(char prefix) {
     char numbuf[16];
     int len = itoa64(x, numbuf);
     for (int i = 0; i < len; i++) buf[n++] = numbuf[i];
+    buf[n] = '\0';
+    return buf;
+}
+
+static char *make_var(char *name) {
+    char *buf = ast_arena_alloc(129);
+    buf[0] = 'u';
+    buf[1] = '_';
+    size_t n = 0;
+    while (n < 127 && name[n]) {
+        buf[n + 2] = name[n];
+        n++;
+    }
+    n++;
+    n++;
     buf[n] = '\0';
     return buf;
 }
@@ -35,10 +53,15 @@ static char *lower_expr(ASTNode *expr, IRFunction *fn) {
     switch (expr->kind) {
         case AST_INT_LITERAL: {
             // tX = const VALUE
-            char *temp = new_temp();
             IRInst *inst = make_inst();
             inst->op = IR_CONST;
-            inst->dst = temp;
+            if (name_to_assign) {
+                inst->dst = make_var(name_to_assign->data.text.name);
+                name_to_assign = NULL;
+            } else {
+                char *temp = new_temp();
+                inst->dst = temp;
+            }
 
             char *litbuf = ast_arena_alloc(32);
             int len;
@@ -62,116 +85,141 @@ static char *lower_expr(ASTNode *expr, IRFunction *fn) {
             inst->type = type;
 
             ir_emit(fn, inst);
-            return temp;
+            return inst->dst;
         }
 
         case AST_IDENTIFIER: {
-            // tX = load var
-            char *temp = new_temp();
-            IRInst *inst = make_inst();
-            inst->op = IR_LOAD;
-            inst->dst = temp;
-            inst->arg1 = expr->data.text.name;
-            Type *type =
-                get_type(symtab_find_var(expr->data.text.name)->data.text.name);
-            inst->type = type;
-            ir_emit(fn, inst);
-            return temp;
+            return make_var(expr->data.text.name);
         }
 
         case AST_ADD_EXPR: {
             ASTNode *L = expr->first_child;
             ASTNode *R = L->next_sibling;
 
-            char *lt = lower_expr(L, fn);
-            char *rt = lower_expr(R, fn);
-            char *temp = new_temp();
             IRInst *inst = make_inst();
             inst->op = IR_ADD;
-            inst->dst = temp;
+            if (name_to_assign) {
+                inst->dst = make_var(name_to_assign->data.text.name);
+                name_to_assign = NULL;
+            } else {
+                char *temp = new_temp();
+                inst->dst = temp;
+            }
+            char *lt = lower_expr(L, fn);
+            char *rt = lower_expr(R, fn);
             inst->arg1 = lt;
             inst->arg2 = rt;
             Type *type = get_type(expr->type->data.text.name);
             inst->type = type;
             ir_emit(fn, inst);
-            return temp;
+            return inst->dst;
         }
 
         case AST_SUB_EXPR: {
             ASTNode *L = expr->first_child;
             ASTNode *R = L->next_sibling;
 
-            char *lt = lower_expr(L, fn);
-            char *rt = lower_expr(R, fn);
-            char *temp = new_temp();
             IRInst *inst = make_inst();
             inst->op = IR_SUB;
-            inst->dst = temp;
+            if (name_to_assign) {
+                inst->dst = make_var(name_to_assign->data.text.name);
+                name_to_assign = NULL;
+            } else {
+                char *temp = new_temp();
+                inst->dst = temp;
+            }
+            char *lt = lower_expr(L, fn);
+            char *rt = lower_expr(R, fn);
             inst->arg1 = lt;
             inst->arg2 = rt;
             Type *type = get_type(expr->type->data.text.name);
             inst->type = type;
             ir_emit(fn, inst);
-            return temp;
+            return inst->dst;
         }
 
         case AST_MUL_EXPR: {
             ASTNode *L = expr->first_child;
             ASTNode *R = L->next_sibling;
 
-            char *lt = lower_expr(L, fn);
-            char *rt = lower_expr(R, fn);
-            char *temp = new_temp();
             IRInst *inst = make_inst();
             inst->op = IR_MUL;
-            inst->dst = temp;
+            if (name_to_assign) {
+                inst->dst = make_var(name_to_assign->data.text.name);
+                name_to_assign = NULL;
+            } else {
+                char *temp = new_temp();
+                inst->dst = temp;
+            }
+            char *lt = lower_expr(L, fn);
+            char *rt = lower_expr(R, fn);
             inst->arg1 = lt;
             inst->arg2 = rt;
             Type *type = get_type(expr->type->data.text.name);
             inst->type = type;
             ir_emit(fn, inst);
-            return temp;
+            return inst->dst;
         }
 
         case AST_DIV_EXPR: {
             ASTNode *L = expr->first_child;
             ASTNode *R = L->next_sibling;
 
-            char *lt = lower_expr(L, fn);
-            char *rt = lower_expr(R, fn);
-            char *temp = new_temp();
             IRInst *inst = make_inst();
             inst->op = IR_DIV;
-            inst->dst = temp;
+            if (name_to_assign) {
+                inst->dst = make_var(name_to_assign->data.text.name);
+                name_to_assign = NULL;
+            } else {
+                char *temp = new_temp();
+                inst->dst = temp;
+            }
+            char *lt = lower_expr(L, fn);
+            char *rt = lower_expr(R, fn);
             inst->arg1 = lt;
             inst->arg2 = rt;
             Type *type = get_type(expr->type->data.text.name);
             inst->type = type;
             ir_emit(fn, inst);
-            return temp;
+            return inst->dst;
         }
 
         case AST_MOD_EXPR: {
             ASTNode *L = expr->first_child;
             ASTNode *R = L->next_sibling;
 
-            char *lt = lower_expr(L, fn);
-            char *rt = lower_expr(R, fn);
-            char *temp = new_temp();
             IRInst *inst = make_inst();
             inst->op = IR_REM;
-            inst->dst = temp;
+            if (name_to_assign) {
+                inst->dst = make_var(name_to_assign->data.text.name);
+                name_to_assign = NULL;
+            } else {
+                char *temp = new_temp();
+                inst->dst = temp;
+            }
+            char *lt = lower_expr(L, fn);
+            char *rt = lower_expr(R, fn);
             inst->arg1 = lt;
             inst->arg2 = rt;
             Type *type = get_type(expr->type->data.text.name);
             inst->type = type;
             ir_emit(fn, inst);
-            return temp;
+            return inst->dst;
         }
 
         case AST_CALL_EXPR: {
             ASTNode *id = expr->first_child;
             ASTNode *arglist = id->next_sibling;
+
+            IRInst *inst = make_inst();
+            inst->op = IR_CALL;
+            if (name_to_assign) {
+                inst->dst = make_var(name_to_assign->data.text.name);
+                name_to_assign = NULL;
+            } else {
+                char *temp = new_temp();
+                inst->dst = temp;
+            }
 
             int count = 0;
             for (ASTNode *a = arglist->first_child; a; a = a->next_sibling)
@@ -185,10 +233,6 @@ static char *lower_expr(ASTNode *expr, IRFunction *fn) {
                 args[idx] = lower_expr(a, fn);
             }
 
-            char *temp = new_temp();
-            IRInst *inst = make_inst();
-            inst->op = IR_CALL;
-            inst->dst = temp;
             inst->arg1 = id->data.text.name;
             inst->nargs = idx;
             for (int j = 0; j < idx; j++) inst->args[j] = args[j];
@@ -197,7 +241,7 @@ static char *lower_expr(ASTNode *expr, IRFunction *fn) {
             inst->type = type;
 
             ir_emit(fn, inst);
-            return temp;
+            return inst->dst;
         }
 
         case AST_EXPRESSION:
@@ -218,12 +262,17 @@ static void lower_stmt(ASTNode *stmt, IRFunction *fn) {
             IRInst *inst = make_inst();
             inst->op = IR_STORE;
             if (init) {
+                name_to_assign = name;
                 char *val = lower_expr(init, fn);
+                if (val[0] == 'u') {
+                    break;
+                }
+                name_to_assign = NULL;
                 inst->arg1 = val;
             } else {
                 inst->arg1 = "NULL";
             }
-            inst->dst = name->data.text.name;
+            inst->dst = make_var(name->data.text.name);
             inst->type =
                 get_type(symtab_find_var(name->data.text.name)->data.text.name);
             ir_emit(fn, inst);
@@ -234,11 +283,16 @@ static void lower_stmt(ASTNode *stmt, IRFunction *fn) {
             ASTNode *lhs = stmt->first_child;
             ASTNode *rhs = lhs->next_sibling;
 
+            name_to_assign = lhs;
             char *val = lower_expr(rhs, fn);
+            if (val[0] != 't') {
+                break;
+            }
+            name_to_assign = NULL;
             IRInst *inst = make_inst();
             inst->op = IR_STORE;
             inst->arg1 = val;
-            inst->dst = lhs->data.text.name;
+            inst->dst = make_var(lhs->data.text.name);
             inst->type =
                 get_type(symtab_find_var(lhs->data.text.name)->data.text.name);
             ir_emit(fn, inst);
@@ -287,7 +341,7 @@ void irgen_program(ASTNode *ast_root, IRProgram *pr) {
         ASTNode *plist = fn->first_child->next_sibling->next_sibling;
         for (ASTNode *p = plist->first_child; p; p = p->next_sibling) {
             F->params[F->n_params++] =
-                p->first_child->next_sibling->data.text.name;
+                make_var(p->first_child->next_sibling->data.text.name);
         }
         F->n_code = 0;
 
