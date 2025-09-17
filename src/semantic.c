@@ -15,6 +15,213 @@ int is_integer_type(ASTNode *type) {
            symtab_same_type(type->data.text.name, "i64");
 }
 
+int can_widen_integer(ASTNode *to, ASTNode *from) {
+    if (symtab_same_type(to->data.text.name, "u8")) {
+        if (symtab_same_type(from->data.text.name, "u8")) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+
+    if (symtab_same_type(to->data.text.name, "u16")) {
+        if (symtab_same_type(from->data.text.name, "u8")) {
+            return 1;
+        } else if (symtab_same_type(from->data.text.name, "u16")) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+
+    if (symtab_same_type(to->data.text.name, "u32")) {
+        if (symtab_same_type(from->data.text.name, "u8")) {
+            return 1;
+        } else if (symtab_same_type(from->data.text.name, "u16")) {
+            return 1;
+        } else if (symtab_same_type(from->data.text.name, "u32")) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+
+    if (symtab_same_type(to->data.text.name, "u64")) {
+        if (symtab_same_type(from->data.text.name, "u8")) {
+            return 1;
+        } else if (symtab_same_type(from->data.text.name, "u16")) {
+            return 1;
+        } else if (symtab_same_type(from->data.text.name, "u32")) {
+            return 1;
+        } else if (symtab_same_type(from->data.text.name, "u64")) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+
+    if (symtab_same_type(to->data.text.name, "i8")) {
+        if (symtab_same_type(from->data.text.name, "i8")) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+
+    if (symtab_same_type(to->data.text.name, "i16")) {
+        if (symtab_same_type(from->data.text.name, "i8")) {
+            return 1;
+        } else if (symtab_same_type(from->data.text.name, "i16")) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+
+    if (symtab_same_type(to->data.text.name, "i32")) {
+        if (symtab_same_type(from->data.text.name, "i8")) {
+            return 1;
+        } else if (symtab_same_type(from->data.text.name, "i16")) {
+            return 1;
+        } else if (symtab_same_type(from->data.text.name, "i32")) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+
+    if (symtab_same_type(to->data.text.name, "i64")) {
+        if (symtab_same_type(from->data.text.name, "i8")) {
+            return 1;
+        } else if (symtab_same_type(from->data.text.name, "i16")) {
+            return 1;
+        } else if (symtab_same_type(from->data.text.name, "i32")) {
+            return 1;
+        } else if (symtab_same_type(from->data.text.name, "i64")) {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+    return 0;
+}
+
+ASTNode *promote_integer(ASTNode *a, ASTNode *b) {
+    if (symtab_same_type(a->data.text.name, "u8")) {
+        if (symtab_same_type(b->data.text.name, "u8")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "u16")) {
+            return b;
+        } else if (symtab_same_type(b->data.text.name, "u32")) {
+            return b;
+        } else if (symtab_same_type(b->data.text.name, "u64")) {
+            return b;
+        } else {
+            return NULL;
+        }
+    }
+
+    if (symtab_same_type(a->data.text.name, "u16")) {
+        if (symtab_same_type(b->data.text.name, "u8")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "u16")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "u32")) {
+            return b;
+        } else if (symtab_same_type(b->data.text.name, "u64")) {
+            return b;
+        } else {
+            return NULL;
+        }
+    }
+
+    if (symtab_same_type(a->data.text.name, "u32")) {
+        if (symtab_same_type(b->data.text.name, "u8")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "u16")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "u32")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "u64")) {
+            return b;
+        } else {
+            return NULL;
+        }
+    }
+
+    if (symtab_same_type(a->data.text.name, "u64")) {
+        if (symtab_same_type(b->data.text.name, "u8")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "u16")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "u32")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "u64")) {
+            return a;
+        } else {
+            return NULL;
+        }
+    }
+
+    if (symtab_same_type(a->data.text.name, "i8")) {
+        if (symtab_same_type(b->data.text.name, "i8")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "i16")) {
+            return b;
+        } else if (symtab_same_type(b->data.text.name, "i32")) {
+            return b;
+        } else if (symtab_same_type(b->data.text.name, "i64")) {
+            return b;
+        } else {
+            return NULL;
+        }
+    }
+
+    if (symtab_same_type(a->data.text.name, "i16")) {
+        if (symtab_same_type(b->data.text.name, "i8")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "i16")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "i32")) {
+            return b;
+        } else if (symtab_same_type(b->data.text.name, "i64")) {
+            return b;
+        } else {
+            return NULL;
+        }
+    }
+
+    if (symtab_same_type(a->data.text.name, "i32")) {
+        if (symtab_same_type(b->data.text.name, "i8")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "i16")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "i32")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "i64")) {
+            return b;
+        } else {
+            return NULL;
+        }
+    }
+
+    if (symtab_same_type(a->data.text.name, "i64")) {
+        if (symtab_same_type(b->data.text.name, "i8")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "i16")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "i32")) {
+            return a;
+        } else if (symtab_same_type(b->data.text.name, "i64")) {
+            return a;
+        } else {
+            return NULL;
+        }
+    }
+
+    return NULL;
+}
+
 // Entry point
 void semantic_check(ASTNode *program) {
     semantic_error_count = 0;
@@ -126,7 +333,8 @@ static void check_decl(ASTNode *decl, SemanticContext *ctx) {
         ctx->expected_int_lit_type = type;
         ASTNode *init_ty = check_expr(init, ctx);
         ctx->expected_int_lit_type = NULL;
-        if (init_ty &&
+
+        if (init_ty && !can_widen_integer(type, init_ty) &&
             !symtab_same_type(init_ty->data.text.name, type->data.text.name)) {
             report_error(init->line, init->column, "Initializer type mismatch");
         }
@@ -137,11 +345,12 @@ static void check_return(ASTNode *ret, SemanticContext *ctx) {
     ctx->expected_int_lit_type = ctx->return_type;
     ASTNode *type = check_expr(ret->first_child, ctx);
     ctx->expected_int_lit_type = NULL;
-    if (!symtab_same_type(type->data.text.name,
+    if (!can_widen_integer(ctx->return_type, type) &&
+        !symtab_same_type(type->data.text.name,
                           ctx->return_type->data.text.name)) {
         report_error(ret->line, ret->column, "Return type mismatch");
     }
-    ret->type = type;
+    ret->type = promote_integer(ctx->return_type, type);
     ctx->return_type = NULL;
 }
 
@@ -168,8 +377,9 @@ static void check_assign(ASTNode *assign, SemanticContext *ctx) {
     ctx->expected_int_lit_type = ident_type;
     ASTNode *expr_type = check_expr(expr, ctx);
     ctx->expected_int_lit_type = NULL;
-    if (expr_type && !symtab_same_type(expr_type->data.text.name,
-                                       ident_type->data.text.name)) {
+    if (expr_type && !can_widen_integer(ident_type, expr_type) &&
+        !symtab_same_type(expr_type->data.text.name,
+                          ident_type->data.text.name)) {
         report_error(ident->line, ident->column, "Type mismatch in assignment");
     }
 }
@@ -187,6 +397,21 @@ static ASTNode *check_expr(ASTNode *expr, SemanticContext *ctx) {
         case AST_DIV_EXPR:
         case AST_MOD_EXPR: {
             ASTNode *type = check_mul_expr(expr->first_child, ctx);
+            expr->type = type;
+            return type;
+        }
+        case AST_NEG_EXPR:
+        case AST_BW_NOT_EXPR: {
+            ASTNode *type = check_unary_expr(expr->first_child, ctx);
+            expr->type = type;
+            return type;
+        }
+        case AST_SHIFT_RIGHT:
+        case AST_SHIFT_LEFT:
+        case AST_BW_AND_EXPR:
+        case AST_BW_XOR_EXPR:
+        case AST_BW_OR_EXPR: {
+            ASTNode *type = check_bitwise_expr(expr->first_child, ctx);
             expr->type = type;
             return type;
         }
@@ -214,6 +439,10 @@ static ASTNode *check_add_expr(ASTNode *add_expr, SemanticContext *ctx) {
         lh_type = check_add_expr(lh, ctx);
     } else if (lh->kind >= AST_MUL_EXPR && lh->kind <= AST_MOD_EXPR) {
         lh_type = check_mul_expr(lh, ctx);
+    } else if (lh->kind >= AST_SHIFT_RIGHT && lh->kind <= AST_BW_OR_EXPR) {
+        lh_type = check_bitwise_expr(lh, ctx);
+    } else if (lh->kind >= AST_NEG_EXPR && lh->kind <= AST_BW_NOT_EXPR) {
+        lh_type = check_unary_expr(lh, ctx);
     } else {
         lh_type = check_primary(lh, ctx);
     }
@@ -223,13 +452,18 @@ static ASTNode *check_add_expr(ASTNode *add_expr, SemanticContext *ctx) {
         rh_type = check_add_expr(rh, ctx);
     } else if (rh->kind >= AST_MUL_EXPR && rh->kind <= AST_MOD_EXPR) {
         rh_type = check_mul_expr(rh, ctx);
+    } else if (rh->kind >= AST_SHIFT_RIGHT && rh->kind <= AST_BW_OR_EXPR) {
+        rh_type = check_bitwise_expr(rh, ctx);
+    } else if (rh->kind >= AST_NEG_EXPR && rh->kind <= AST_BW_NOT_EXPR) {
+        rh_type = check_unary_expr(rh, ctx);
     } else {
         rh_type = check_primary(rh, ctx);
     }
 
-    if (!symtab_same_type(lh_type->data.text.name, rh_type->data.text.name)) {
+    if (!can_widen_integer(lh_type, rh_type) &&
+        !can_widen_integer(rh_type, lh_type)) {
         report_error(add_expr->line, add_expr->column,
-                     "Type mismatch in add_expr");
+                     "Invalid operands in add_expr");
     }
 
     if (!is_integer_type(lh_type) || !is_integer_type(rh_type)) {
@@ -237,8 +471,8 @@ static ASTNode *check_add_expr(ASTNode *add_expr, SemanticContext *ctx) {
                      "Type doesnt support operator");
     }
 
-    add_expr->type = lh_type;
-    return lh_type;
+    add_expr->type = promote_integer(lh_type, rh_type);
+    return add_expr->type;
 }
 
 static ASTNode *check_mul_expr(ASTNode *mul_expr, SemanticContext *ctx) {
@@ -250,6 +484,10 @@ static ASTNode *check_mul_expr(ASTNode *mul_expr, SemanticContext *ctx) {
         lh_type = check_add_expr(lh, ctx);
     } else if (lh->kind >= AST_MUL_EXPR && lh->kind <= AST_MOD_EXPR) {
         lh_type = check_mul_expr(lh, ctx);
+    } else if (lh->kind >= AST_SHIFT_RIGHT && lh->kind <= AST_BW_OR_EXPR) {
+        lh_type = check_bitwise_expr(lh, ctx);
+    } else if (lh->kind >= AST_NEG_EXPR && lh->kind <= AST_BW_NOT_EXPR) {
+        lh_type = check_unary_expr(lh, ctx);
     } else {
         lh_type = check_primary(lh, ctx);
     }
@@ -259,13 +497,18 @@ static ASTNode *check_mul_expr(ASTNode *mul_expr, SemanticContext *ctx) {
         rh_type = check_add_expr(rh, ctx);
     } else if (rh->kind >= AST_MUL_EXPR && rh->kind <= AST_MOD_EXPR) {
         rh_type = check_mul_expr(rh, ctx);
+    } else if (rh->kind >= AST_SHIFT_RIGHT && rh->kind <= AST_BW_OR_EXPR) {
+        rh_type = check_bitwise_expr(rh, ctx);
+    } else if (rh->kind >= AST_NEG_EXPR && rh->kind <= AST_BW_NOT_EXPR) {
+        rh_type = check_unary_expr(rh, ctx);
     } else {
         rh_type = check_primary(rh, ctx);
     }
 
-    if (!symtab_same_type(lh_type->data.text.name, rh_type->data.text.name)) {
+    if (!can_widen_integer(lh_type, rh_type) &&
+        !can_widen_integer(rh_type, lh_type)) {
         report_error(mul_expr->line, mul_expr->column,
-                     "Type mismatch in mul_expr");
+                     "Invalid operands in mul_expr");
     }
 
     if (mul_expr->kind == AST_MOD_EXPR) {
@@ -280,8 +523,114 @@ static ASTNode *check_mul_expr(ASTNode *mul_expr, SemanticContext *ctx) {
         }
     }
 
-    mul_expr->type = lh_type;
-    return lh_type;
+    mul_expr->type = promote_integer(lh_type, rh_type);
+    return mul_expr->type;
+}
+
+static ASTNode *check_bitwise_expr(ASTNode *bitwise_expr,
+                                   SemanticContext *ctx) {
+    ASTNode *lh = bitwise_expr->first_child;
+    ASTNode *rh = lh->next_sibling;
+
+    ASTNode *lh_type = NULL;
+    if (lh->kind >= AST_ADD_EXPR && lh->kind <= AST_SUB_EXPR) {
+        lh_type = check_add_expr(lh, ctx);
+    } else if (lh->kind >= AST_MUL_EXPR && lh->kind <= AST_MOD_EXPR) {
+        lh_type = check_mul_expr(lh, ctx);
+    } else if (lh->kind >= AST_SHIFT_RIGHT && lh->kind <= AST_BW_OR_EXPR) {
+        lh_type = check_bitwise_expr(lh, ctx);
+    } else if (lh->kind >= AST_NEG_EXPR && lh->kind <= AST_BW_NOT_EXPR) {
+        lh_type = check_unary_expr(lh, ctx);
+    } else {
+        lh_type = check_primary(lh, ctx);
+    }
+
+    ASTNode *rh_type = NULL;
+    if (rh->kind >= AST_ADD_EXPR && rh->kind <= AST_SUB_EXPR) {
+        rh_type = check_add_expr(rh, ctx);
+    } else if (rh->kind >= AST_MUL_EXPR && rh->kind <= AST_MOD_EXPR) {
+        rh_type = check_mul_expr(rh, ctx);
+    } else if (rh->kind >= AST_SHIFT_RIGHT && rh->kind <= AST_BW_OR_EXPR) {
+        rh_type = check_bitwise_expr(rh, ctx);
+    } else if (rh->kind >= AST_NEG_EXPR && rh->kind <= AST_BW_NOT_EXPR) {
+        rh_type = check_unary_expr(rh, ctx);
+    } else {
+        rh_type = check_primary(rh, ctx);
+    }
+
+    if (!can_widen_integer(lh_type, rh_type) &&
+        !can_widen_integer(rh_type, lh_type)) {
+        report_error(bitwise_expr->line, bitwise_expr->column,
+                     "Invalid operands in bitwise_expr");
+    }
+
+    if (!is_integer_type(lh_type) || !is_integer_type(rh_type)) {
+        report_error(bitwise_expr->line, bitwise_expr->column,
+                     "Type doesnt support operator");
+    }
+
+    if (bitwise_expr->kind == AST_SHIFT_RIGHT ||
+        bitwise_expr->kind == AST_SHIFT_LEFT) {
+        if (rh->kind == AST_INT_LITERAL) {
+            size_t size = 0;
+            ASTNode *type = promote_integer(lh_type, rh_type);
+            if (symtab_same_type(type->data.text.name, "u8") ||
+                symtab_same_type(type->data.text.name, "i8")) {
+                size = 8;
+            } else if (symtab_same_type(type->data.text.name, "u16") ||
+                       symtab_same_type(type->data.text.name, "i16")) {
+                size = 16;
+            } else if (symtab_same_type(type->data.text.name, "u32") ||
+                       symtab_same_type(type->data.text.name, "i32")) {
+                size = 32;
+            } else if (symtab_same_type(type->data.text.name, "u64") ||
+                       symtab_same_type(type->data.text.name, "i64")) {
+                size = 64;
+            }
+
+            if (rh->data.int_lit.u_val == 0) {
+                if (!(rh->data.int_lit.i_val >= 0 &&
+                      rh->data.int_lit.i_val < size)) {
+                    report_error(rh->line, rh->column,
+                                 "Value too large for shift");
+                }
+            } else {
+                if (!(rh->data.int_lit.u_val >= 0 &&
+                      rh->data.int_lit.u_val < size)) {
+                    report_error(rh->line, rh->column,
+                                 "Value too large for shift");
+                }
+            }
+        }
+    }
+
+    bitwise_expr->type = promote_integer(lh_type, rh_type);
+    return bitwise_expr->type;
+}
+
+static ASTNode *check_unary_expr(ASTNode *unary_expr, SemanticContext *ctx) {
+    ASTNode *rh = unary_expr->first_child;
+
+    ASTNode *rh_type = NULL;
+    if (rh->kind >= AST_ADD_EXPR && rh->kind <= AST_SUB_EXPR) {
+        rh_type = check_add_expr(rh, ctx);
+    } else if (rh->kind >= AST_MUL_EXPR && rh->kind <= AST_MOD_EXPR) {
+        rh_type = check_mul_expr(rh, ctx);
+    } else if (rh->kind >= AST_SHIFT_RIGHT && rh->kind <= AST_BW_OR_EXPR) {
+        rh_type = check_bitwise_expr(rh, ctx);
+    } else if (rh->kind >= AST_NEG_EXPR && rh->kind <= AST_BW_NOT_EXPR) {
+        rh_type = check_unary_expr(rh, ctx);
+    } else {
+        rh_type = check_primary(rh, ctx);
+    }
+
+    if (!is_integer_type(rh_type)) {
+        report_error(unary_expr->line, unary_expr->column,
+                     "Type doesnt support operator");
+    }
+
+    unary_expr->type = rh_type;
+    return unary_expr->type;
 }
 
 static ASTNode *check_primary(ASTNode *primary, SemanticContext *ctx) {
@@ -442,7 +791,8 @@ static ASTNode *check_call_expr(ASTNode *call_expr, SemanticContext *ctx) {
         ctx->expected_int_lit_type = fn_arg_type;
         ASTNode *arg_type = check_expr(arg, ctx);
         ctx->expected_int_lit_type = NULL;
-        if (!symtab_same_type(arg_type->data.text.name,
+        if (!can_widen_integer(fn_arg_type, arg_type) &&
+            !symtab_same_type(arg_type->data.text.name,
                               fn_arg_type->data.text.name)) {
             report_error(arg->line, arg->column,
                          "Argument type mismatch in function call");

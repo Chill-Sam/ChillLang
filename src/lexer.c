@@ -192,6 +192,36 @@ Token lex_char(void) {
         case ',':
             tok.type = TOKEN_COMMA;
             break;
+        case '<':
+            if (peek_char() == '<') {
+                next_char();
+                tok.length = 2;
+                tok.lexeme[1] = '<';
+                tok.lexeme[2] = '\0';
+                tok.type = TOKEN_SHIFT_LEFT;
+            }
+            break;
+        case '>':
+            if (peek_char() == '>') {
+                next_char();
+                tok.length = 2;
+                tok.lexeme[1] = '<';
+                tok.lexeme[2] = '\0';
+                tok.type = TOKEN_SHIFT_RIGHT;
+            }
+            break;
+        case '&':
+            tok.type = TOKEN_AMPERSAND;
+            break;
+        case '|':
+            tok.type = TOKEN_PIPE;
+            break;
+        case '^':
+            tok.type = TOKEN_XOR;
+            break;
+        case '~':
+            tok.type = TOKEN_NOT;
+            break;
         default:
             tok = make_error_token(line, column, &c, 1,
                                    "Error: Unknown character while lexing\n");

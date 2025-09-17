@@ -1,5 +1,6 @@
 #include "AST/ast.c"
 #include "AST/ast_log.c"
+#include "as_ld.c"
 #include "codegen.c"
 #include "codegen.h"
 #include "file_stream.c"
@@ -60,5 +61,6 @@ int main(int argc, char *argv[]) {
     }
 
     emit_start();
+    output();
     return 0;
 }

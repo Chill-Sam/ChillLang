@@ -126,6 +126,82 @@ static void ir_print_inst(const IRInst *i) {
             ir_print_safe_write("\n", 1);
             break;
 
+        case IR_BW_NOT_EXPR:
+            //   dst = ~arg1
+            ir_print_safe_write("  ", 2);
+            ir_print_safe_write(i->dst, ir_print_str_len(i->dst));
+            ir_print_safe_write(" = ~", 4);
+            ir_print_safe_write(i->arg1, ir_print_str_len(i->arg1));
+            ir_print_safe_write(" type = ", 8);
+            ir_print_safe_write(i->type->name, ir_print_str_len(i->type->name));
+            ir_print_safe_write("\n", 1);
+            break;
+
+        case IR_SHIFT_RIGHT:
+            //   dst = arg1 << arg2
+            ir_print_safe_write("  ", 2);
+            ir_print_safe_write(i->dst, ir_print_str_len(i->dst));
+            ir_print_safe_write(" = ", 3);
+            ir_print_safe_write(i->arg1, ir_print_str_len(i->arg1));
+            ir_print_safe_write(" >> ", 4);
+            ir_print_safe_write(i->arg2, ir_print_str_len(i->arg2));
+            ir_print_safe_write(" type = ", 8);
+            ir_print_safe_write(i->type->name, ir_print_str_len(i->type->name));
+            ir_print_safe_write("\n", 1);
+            break;
+
+        case IR_SHIFT_LEFT:
+            //   dst = arg1 << arg2
+            ir_print_safe_write("  ", 2);
+            ir_print_safe_write(i->dst, ir_print_str_len(i->dst));
+            ir_print_safe_write(" = ", 3);
+            ir_print_safe_write(i->arg1, ir_print_str_len(i->arg1));
+            ir_print_safe_write(" << ", 4);
+            ir_print_safe_write(i->arg2, ir_print_str_len(i->arg2));
+            ir_print_safe_write(" type = ", 8);
+            ir_print_safe_write(i->type->name, ir_print_str_len(i->type->name));
+            ir_print_safe_write("\n", 1);
+            break;
+
+        case IR_BW_AND_EXPR:
+            //   dst = arg1 & arg2
+            ir_print_safe_write("  ", 2);
+            ir_print_safe_write(i->dst, ir_print_str_len(i->dst));
+            ir_print_safe_write(" = ", 3);
+            ir_print_safe_write(i->arg1, ir_print_str_len(i->arg1));
+            ir_print_safe_write(" & ", 3);
+            ir_print_safe_write(i->arg2, ir_print_str_len(i->arg2));
+            ir_print_safe_write(" type = ", 8);
+            ir_print_safe_write(i->type->name, ir_print_str_len(i->type->name));
+            ir_print_safe_write("\n", 1);
+            break;
+
+        case IR_BW_XOR_EXPR:
+            //   dst = arg1 ^ arg2
+            ir_print_safe_write("  ", 2);
+            ir_print_safe_write(i->dst, ir_print_str_len(i->dst));
+            ir_print_safe_write(" = ", 3);
+            ir_print_safe_write(i->arg1, ir_print_str_len(i->arg1));
+            ir_print_safe_write(" ^ ", 3);
+            ir_print_safe_write(i->arg2, ir_print_str_len(i->arg2));
+            ir_print_safe_write(" type = ", 8);
+            ir_print_safe_write(i->type->name, ir_print_str_len(i->type->name));
+            ir_print_safe_write("\n", 1);
+            break;
+
+        case IR_BW_OR_EXPR:
+            //   dst = arg1 | arg2
+            ir_print_safe_write("  ", 2);
+            ir_print_safe_write(i->dst, ir_print_str_len(i->dst));
+            ir_print_safe_write(" = ", 3);
+            ir_print_safe_write(i->arg1, ir_print_str_len(i->arg1));
+            ir_print_safe_write(" | ", 3);
+            ir_print_safe_write(i->arg2, ir_print_str_len(i->arg2));
+            ir_print_safe_write(" type = ", 8);
+            ir_print_safe_write(i->type->name, ir_print_str_len(i->type->name));
+            ir_print_safe_write("\n", 1);
+            break;
+
         case IR_CALL:
             //   dst = call fn(arg0, arg1, …)
             ir_print_safe_write("  ", 2);

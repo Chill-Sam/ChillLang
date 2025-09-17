@@ -23,6 +23,12 @@ enum TokenType {
     TOKEN_PERCENT,
     TOKEN_COMMA,
     TOKEN_EQUALS,  // 8
+    TOKEN_SHIFT_LEFT,
+    TOKEN_SHIFT_RIGHT,
+    TOKEN_AMPERSAND,
+    TOKEN_PIPE,
+    TOKEN_XOR,
+    TOKEN_NOT,
 
     // Literals
     TOKEN_I8_LITERAL,

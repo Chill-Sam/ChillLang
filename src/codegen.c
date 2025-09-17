@@ -1,6 +1,7 @@
 #include "codegen.h"
 
 #include "file_stream.c"
+#include "ir.h"
 
 int out_fd = -1;
 
@@ -60,32 +61,7 @@ static void build_slots_for_function(const IRFunction *fn) {
     for (size_t j = 0; j < fn->n_code; j++) {
         IRInst *inst = fn->code[j];
 
-        // a) loads from a variable → add that var
-        if (inst->op == IR_LOAD) {
-            const char *v = inst->arg1;
-            // if it doesn’t look like a temp (not 't0','t1',…)
-            if (v && v[0] == 'u' && find_slot(v) < 0) {
-                add_slot(v);
-            }
-        }
-
-        // b) stores into a variable → add that var
-        if (inst->op == IR_STORE) {
-            const char *v = inst->dst;
-            if (v && v[0] == 'u' && find_slot(v) < 0) {
-                add_slot(v);
-            }
-        }
-
-        if (inst->op == IR_CONST) {
-            const char *v = inst->dst;
-            if (v && v[0] == 'u' && find_slot(v) < 0) {
-                add_slot(v);
-            }
-        }
-
-        // c) temps (dst starting with 't')
-        if (inst->dst && inst->dst[0] == 't') {
+        if (inst->dst) {
             if (find_slot(inst->dst) < 0) {
                 add_slot(inst->dst);
             }
@@ -290,6 +266,154 @@ static void lower_inst_to_asm(const IRInst *i) {
             break;
         }
 
+        case IR_BW_NOT_EXPR: {
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg1, "%eax", t);
+            } else {
+                load_stack_to_reg(i->arg1, "%rax", t);
+            }
+
+            if (t->size == 1) {
+                ir_safe_write("  notb %al\n", 11);
+            } else if (t->size == 2) {
+                ir_safe_write("  notw %ax\n", 11);
+            } else if (t->size == 4) {
+                ir_safe_write("  notl %eax\n", 12);
+            } else {
+                ir_safe_write("  notq %rax\n", 12);
+            }
+
+            load_reg_to_stack(t, i->dst);
+            break;
+        }
+
+        case IR_SHIFT_RIGHT: {
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg1, "%eax", t);
+                load_stack_to_reg(i->arg2, "%ecx", t);
+            } else {
+                load_stack_to_reg(i->arg1, "%rax", t);
+                load_stack_to_reg(i->arg2, "%rcx", t);
+            }
+
+            if (t->size == 1) {
+                if (t->kind == TY_INT)
+                    ir_safe_write("  sarb %cl, %al\n", 16);
+                else
+                    ir_safe_write("  shrb %cl, %al\n", 16);
+            } else if (t->size == 2) {
+                if (t->kind == TY_INT)
+                    ir_safe_write("  sarw %cl, %ax\n", 16);
+                else
+                    ir_safe_write("  shrw %cl, %ax\n", 16);
+            } else if (t->size == 4) {
+                if (t->kind == TY_INT)
+                    ir_safe_write("  sarl %cl, %eax\n", 17);
+                else
+                    ir_safe_write("  shrl %cl, %eax\n", 17);
+            } else {
+                if (t->kind == TY_INT)
+                    ir_safe_write("  sarq %cl, %rax\n", 17);
+                else
+                    ir_safe_write("  shrq %cl, %rax\n", 17);
+            }
+
+            load_reg_to_stack(t, i->dst);
+            break;
+        }
+
+        case IR_SHIFT_LEFT: {
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg1, "%eax", t);
+                load_stack_to_reg(i->arg2, "%ecx", t);
+            } else {
+                load_stack_to_reg(i->arg1, "%rax", t);
+                load_stack_to_reg(i->arg2, "%rcx", t);
+            }
+
+            if (t->size == 1) {
+                ir_safe_write("  salb %cl, %al\n", 16);
+            } else if (t->size == 2) {
+                ir_safe_write("  salw %cl, %ax\n", 16);
+            } else if (t->size == 4) {
+                ir_safe_write("  sall %cl, %eax\n", 17);
+            } else {
+                ir_safe_write("  salq %cl, %rax\n", 17);
+            }
+
+            load_reg_to_stack(t, i->dst);
+            break;
+        }
+
+        case IR_BW_AND_EXPR: {
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg1, "%eax", t);
+                load_stack_to_reg(i->arg2, "%ecx", t);
+            } else {
+                load_stack_to_reg(i->arg1, "%rax", t);
+                load_stack_to_reg(i->arg2, "%rcx", t);
+            }
+
+            if (t->size == 1) {
+                ir_safe_write("  andb %cl, %al\n", 16);
+            } else if (t->size == 2) {
+                ir_safe_write("  andw %cx, %ax\n", 16);
+            } else if (t->size == 4) {
+                ir_safe_write("  andl %ecx, %eax\n", 18);
+            } else {
+                ir_safe_write("  andq %rcx, %rax\n", 18);
+            }
+
+            load_reg_to_stack(t, i->dst);
+            break;
+        }
+
+        case IR_BW_XOR_EXPR: {
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg1, "%eax", t);
+                load_stack_to_reg(i->arg2, "%ecx", t);
+            } else {
+                load_stack_to_reg(i->arg1, "%rax", t);
+                load_stack_to_reg(i->arg2, "%rcx", t);
+            }
+
+            if (t->size == 1) {
+                ir_safe_write("  xorb %cl, %al\n", 16);
+            } else if (t->size == 2) {
+                ir_safe_write("  xorw %cx, %ax\n", 16);
+            } else if (t->size == 4) {
+                ir_safe_write("  xorl %ecx, %eax\n", 18);
+            } else {
+                ir_safe_write("  xorq %rcx, %rax\n", 18);
+            }
+
+            load_reg_to_stack(t, i->dst);
+            break;
+        }
+
+        case IR_BW_OR_EXPR: {
+            if (t->size == 4 && t->kind != TY_INT) {
+                load_stack_to_reg(i->arg1, "%eax", t);
+                load_stack_to_reg(i->arg2, "%ecx", t);
+            } else {
+                load_stack_to_reg(i->arg1, "%rax", t);
+                load_stack_to_reg(i->arg2, "%rcx", t);
+            }
+
+            if (t->size == 1) {
+                ir_safe_write("  orb %cl, %al\n", 15);
+            } else if (t->size == 2) {
+                ir_safe_write("  orw %cx, %ax\n", 15);
+            } else if (t->size == 4) {
+                ir_safe_write("  orl %ecx, %eax\n", 17);
+            } else {
+                ir_safe_write("  orq %rcx, %rax\n", 17);
+            }
+
+            load_reg_to_stack(t, i->dst);
+            break;
+        }
+
         case IR_CALL: {
             // move args into registers
             static const char *regs[6] = {"%rdi", "%rsi", "%rdx",
@@ -312,22 +436,6 @@ static void lower_inst_to_asm(const IRInst *i) {
         }
 
         case IR_RET: {
-            // int idx = find_slot(i->arg1);
-            // if (idx < 0) write(STDOUT_FILENO, "ERR SLOT\n", 9);
-            // off = slot_table[idx].offset;
-            // if (t->kind == TY_UINT && t->size < 8) {
-            //     ir_safe_write("  movzbq -", 10);
-            //     print_int(off);
-            //     ir_safe_write("(%rbp), %rax\n", 13);
-            // } else if (t->kind == TY_INT && t->size < 8) {
-            //     ir_safe_write("  movsbq -", 10);
-            //     print_int(off);
-            //     ir_safe_write("(%rbp), %rax\n", 13);
-            // } else {
-            //     ir_safe_write("  movq  -", 9);
-            //     print_int(off);
-            //     ir_safe_write("(%rbp), %rax\n", 13);
-            // }
             if (t->size == 4 && t->kind != TY_INT) {
                 load_stack_to_reg(i->arg1, "%eax", t);
             } else {

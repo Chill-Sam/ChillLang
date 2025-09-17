@@ -7,7 +7,7 @@
 <identifier>       ::= <letter> { <letter> | <digit> } ;
 
 ## single-character tokens: 
-"(" ")" "{" "}" "+" "-" "*" "/" "%" "," ";" "="
+"(" ")" "{" "}" "+" "-" "*" "/" "%" "," ";" "=" "<" ">" "&" "|" "^" "~"
 
 ## keywords: 
 "return" "mut"
@@ -42,7 +42,9 @@
 <expression>    ::= <add_expr> ;
 
 <add_expr>      ::= <mul_expr> { ( + | - ) <mul_expr> } ;
-<mul_expr>      ::= <primary> { * | / | % <primary> } ;
+<mul_expr>      ::= <bitwise_expr> { * | / | % <bitwise_expr> } ;
+<bitwise_expr>  ::= <unary_expr> { ( << | >> | & | ^ | | ) <unary_expr> }
+<unary_expr>    ::= { - | ~ } <primary>
 
 <primary>       ::=
       <integer_literal>

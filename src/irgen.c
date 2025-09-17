@@ -207,6 +207,141 @@ static char *lower_expr(ASTNode *expr, IRFunction *fn) {
             return inst->dst;
         }
 
+        case AST_BW_NOT_EXPR: {
+            ASTNode *rhs = expr->first_child;
+
+            IRInst *inst = make_inst();
+            inst->op = IR_BW_NOT_EXPR;
+            if (name_to_assign) {
+                inst->dst = make_var(name_to_assign->data.text.name);
+                name_to_assign = NULL;
+            } else {
+                char *temp = new_temp();
+                inst->dst = temp;
+            }
+            char *rt = lower_expr(rhs, fn);
+            inst->arg1 = rt;
+            Type *type = get_type(expr->type->data.text.name);
+            inst->type = type;
+            ir_emit(fn, inst);
+            return inst->dst;
+        }
+
+        case AST_SHIFT_RIGHT: {
+            ASTNode *lhs = expr->first_child;
+            ASTNode *rhs = lhs->next_sibling;
+
+            IRInst *inst = make_inst();
+            inst->op = IR_SHIFT_RIGHT;
+            if (name_to_assign) {
+                inst->dst = make_var(name_to_assign->data.text.name);
+                name_to_assign = NULL;
+            } else {
+                char *temp = new_temp();
+                inst->dst = temp;
+            }
+            char *lt = lower_expr(lhs, fn);
+            char *rt = lower_expr(rhs, fn);
+            inst->arg1 = lt;
+            inst->arg2 = rt;
+            Type *type = get_type(expr->type->data.text.name);
+            inst->type = type;
+            ir_emit(fn, inst);
+            return inst->dst;
+        }
+
+        case AST_SHIFT_LEFT: {
+            ASTNode *lhs = expr->first_child;
+            ASTNode *rhs = lhs->next_sibling;
+
+            IRInst *inst = make_inst();
+            inst->op = IR_SHIFT_LEFT;
+            if (name_to_assign) {
+                inst->dst = make_var(name_to_assign->data.text.name);
+                name_to_assign = NULL;
+            } else {
+                char *temp = new_temp();
+                inst->dst = temp;
+            }
+            char *lt = lower_expr(lhs, fn);
+            char *rt = lower_expr(rhs, fn);
+            inst->arg1 = lt;
+            inst->arg2 = rt;
+            Type *type = get_type(expr->type->data.text.name);
+            inst->type = type;
+            ir_emit(fn, inst);
+            return inst->dst;
+        }
+
+        case AST_BW_AND_EXPR: {
+            ASTNode *lhs = expr->first_child;
+            ASTNode *rhs = lhs->next_sibling;
+
+            IRInst *inst = make_inst();
+            inst->op = IR_BW_AND_EXPR;
+            if (name_to_assign) {
+                inst->dst = make_var(name_to_assign->data.text.name);
+                name_to_assign = NULL;
+            } else {
+                char *temp = new_temp();
+                inst->dst = temp;
+            }
+            char *lt = lower_expr(lhs, fn);
+            char *rt = lower_expr(rhs, fn);
+            inst->arg1 = lt;
+            inst->arg2 = rt;
+            Type *type = get_type(expr->type->data.text.name);
+            inst->type = type;
+            ir_emit(fn, inst);
+            return inst->dst;
+        }
+
+        case AST_BW_XOR_EXPR: {
+            ASTNode *lhs = expr->first_child;
+            ASTNode *rhs = lhs->next_sibling;
+
+            IRInst *inst = make_inst();
+            inst->op = IR_BW_XOR_EXPR;
+            if (name_to_assign) {
+                inst->dst = make_var(name_to_assign->data.text.name);
+                name_to_assign = NULL;
+            } else {
+                char *temp = new_temp();
+                inst->dst = temp;
+            }
+            char *lt = lower_expr(lhs, fn);
+            char *rt = lower_expr(rhs, fn);
+            inst->arg1 = lt;
+            inst->arg2 = rt;
+            Type *type = get_type(expr->type->data.text.name);
+            inst->type = type;
+            ir_emit(fn, inst);
+            return inst->dst;
+        }
+
+        case AST_BW_OR_EXPR: {
+            ASTNode *lhs = expr->first_child;
+            ASTNode *rhs = lhs->next_sibling;
+
+            IRInst *inst = make_inst();
+            inst->op = IR_BW_OR_EXPR;
+            if (name_to_assign) {
+                inst->dst = make_var(name_to_assign->data.text.name);
+                name_to_assign = NULL;
+            } else {
+                char *temp = new_temp();
+                inst->dst = temp;
+            }
+            char *lt = lower_expr(lhs, fn);
+            char *rt = lower_expr(rhs, fn);
+            inst->arg1 = lt;
+            inst->arg2 = rt;
+            Type *type = get_type(expr->type->data.text.name);
+            inst->type = type;
+            ir_emit(fn, inst);
+            return inst->dst;
+        }
+
         case AST_CALL_EXPR: {
             ASTNode *id = expr->first_child;
             ASTNode *arglist = id->next_sibling;

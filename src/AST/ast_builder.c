@@ -137,6 +137,54 @@ ASTNode *ast_make_mod_expr(ASTNode *lhs, ASTNode *rhs, int line, int column) {
     return e;
 }
 
+ASTNode *ast_make_neg_expr(ASTNode *rhs, int line, int column) {
+    ASTNode *e = ast_new(AST_NEG_EXPR, line, column);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_not_expr(ASTNode *rhs, int line, int column) {
+    ASTNode *e = ast_new(AST_BW_NOT_EXPR, line, column);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_shift_right(ASTNode *lhs, ASTNode *rhs, int line,
+                              int column) {
+    ASTNode *e = ast_new(AST_SHIFT_RIGHT, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_shift_left(ASTNode *lhs, ASTNode *rhs, int line, int column) {
+    ASTNode *e = ast_new(AST_SHIFT_LEFT, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_and_expr(ASTNode *lhs, ASTNode *rhs, int line, int column) {
+    ASTNode *e = ast_new(AST_BW_AND_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_xor_expr(ASTNode *lhs, ASTNode *rhs, int line, int column) {
+    ASTNode *e = ast_new(AST_BW_XOR_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_or_expr(ASTNode *lhs, ASTNode *rhs, int line, int column) {
+    ASTNode *e = ast_new(AST_BW_OR_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
 // <call_expr> ::= <identifier> "(" [ <arg_list> ] ")"
 ASTNode *ast_make_call_expr(ASTNode *fn,
                             ASTNode *arg_list,  // may be NULL
