@@ -3,8 +3,8 @@
 #include "int.c"
 #include "ir_type.h"
 
-#define IR_MAX_FUNCS 128
-#define IR_MAX_CODE 1024
+#define IR_MAX_FUNCS     128
+#define IR_MAX_CODE      1024
 #define IR_MAX_CALL_ARGS 16
 
 typedef enum {
@@ -16,6 +16,7 @@ typedef enum {
     IR_MUL,
     IR_DIV,
     IR_REM,
+    IR_NEG,
     IR_BW_NOT_EXPR,
     IR_SHIFT_RIGHT,
     IR_SHIFT_LEFT,

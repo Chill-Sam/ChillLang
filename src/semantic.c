@@ -225,7 +225,7 @@ ASTNode *promote_integer(ASTNode *a, ASTNode *b) {
 // Entry point
 void semantic_check(ASTNode *program) {
     semantic_error_count = 0;
-    SemanticContext ctx = {.return_type = NULL};
+    SemanticContext ctx  = {.return_type = NULL};
 
     check_node(program, &ctx);
 }
@@ -246,38 +246,39 @@ static void report_error(int line, int col, const char *msg) {
 }
 
 static void check_node(ASTNode *node, SemanticContext *ctx) {
-    if (!node) return;
+    if (!node)
+        return;
 
     switch (node->kind) {
-        case AST_FUNCTION_DEF:
-            check_function_def(node, ctx);
-            break;
+    case AST_FUNCTION_DEF:
+        check_function_def(node, ctx);
+        break;
 
-        case AST_BLOCK:
-            if (!(node->parent && node->parent->kind == AST_FUNCTION_DEF)) {
-                symtab_push_scope();
-            }
-            break;
+    case AST_BLOCK:
+        if (!(node->parent && node->parent->kind == AST_FUNCTION_DEF)) {
+            symtab_push_scope();
+        }
+        break;
 
-        case AST_CONST_DECL:
-        case AST_MUT_DECL:
-            check_decl(node, ctx);
-            break;
+    case AST_CONST_DECL:
+    case AST_MUT_DECL:
+        check_decl(node, ctx);
+        break;
 
-        case AST_RETURN_STMT:
-            check_return(node, ctx);
-            break;
+    case AST_RETURN_STMT:
+        check_return(node, ctx);
+        break;
 
-        case AST_ASSIGN_STMT:
-            check_assign(node, ctx);
-            break;
+    case AST_ASSIGN_STMT:
+        check_assign(node, ctx);
+        break;
 
-        case AST_EXPR_STMT:
-            check_expr_stmt(node, ctx);
-            break;
+    case AST_EXPR_STMT:
+        check_expr_stmt(node, ctx);
+        break;
 
-        default:
-            break;
+    default:
+        break;
     }
 
     for (ASTNode *c = node->first_child; c; c = c->next_sibling) {
@@ -287,8 +288,8 @@ static void check_node(ASTNode *node, SemanticContext *ctx) {
 
 static void check_function_def(ASTNode *fn, SemanticContext *ctx) {
     ASTNode *return_type = fn->first_child;
-    ASTNode *name = return_type->next_sibling;
-    ASTNode *param_list = name->next_sibling;
+    ASTNode *name        = return_type->next_sibling;
+    ASTNode *param_list  = name->next_sibling;
 
     // Check if return type is valid, and store it in ctx
     if (!symtab_is_type(return_type->data.text.name)) {
@@ -297,11 +298,11 @@ static void check_function_def(ASTNode *fn, SemanticContext *ctx) {
     }
     ctx->return_type = return_type;
 
-    symtab_push_scope();  // Create new scope for function
+    symtab_push_scope(); // Create new scope for function
 
     // Check parameters and add to scope.
     for (ASTNode *param = param_list->first_child; param;
-         param = param->next_sibling) {
+         param          = param->next_sibling) {
         ASTNode *type = param->first_child;
         ASTNode *name = type->next_sibling;
 
@@ -318,7 +319,7 @@ static void check_function_def(ASTNode *fn, SemanticContext *ctx) {
 static void check_decl(ASTNode *decl, SemanticContext *ctx) {
     ASTNode *type = decl->first_child;
     ASTNode *name = type->next_sibling;
-    ASTNode *init = name->next_sibling;  // Can be NULL
+    ASTNode *init = name->next_sibling; // Can be NULL
 
     if (!symtab_is_type(type->data.text.name)) {
         report_error(type->line, type->column, "Unknown variable type");
@@ -331,7 +332,7 @@ static void check_decl(ASTNode *decl, SemanticContext *ctx) {
 
     if (init) {
         ctx->expected_int_lit_type = type;
-        ASTNode *init_ty = check_expr(init, ctx);
+        ASTNode *init_ty           = check_expr(init, ctx);
         ctx->expected_int_lit_type = NULL;
 
         if (init_ty && !can_widen_integer(type, init_ty) &&
@@ -343,14 +344,14 @@ static void check_decl(ASTNode *decl, SemanticContext *ctx) {
 
 static void check_return(ASTNode *ret, SemanticContext *ctx) {
     ctx->expected_int_lit_type = ctx->return_type;
-    ASTNode *type = check_expr(ret->first_child, ctx);
+    ASTNode *type              = check_expr(ret->first_child, ctx);
     ctx->expected_int_lit_type = NULL;
     if (!can_widen_integer(ctx->return_type, type) &&
         !symtab_same_type(type->data.text.name,
                           ctx->return_type->data.text.name)) {
         report_error(ret->line, ret->column, "Return type mismatch");
     }
-    ret->type = promote_integer(ctx->return_type, type);
+    ret->type        = promote_integer(ctx->return_type, type);
     ctx->return_type = NULL;
 }
 
@@ -359,8 +360,8 @@ static void check_expr_stmt(ASTNode *expr_stmt, SemanticContext *ctx) {
 }
 
 static void check_assign(ASTNode *assign, SemanticContext *ctx) {
-    ASTNode *ident = assign->first_child;
-    ASTNode *expr = ident->next_sibling;
+    ASTNode *ident      = assign->first_child;
+    ASTNode *expr       = ident->next_sibling;
 
     ASTNode *ident_type = symtab_find_var(ident->data.text.name);
     if (!ident_type) {
@@ -375,7 +376,7 @@ static void check_assign(ASTNode *assign, SemanticContext *ctx) {
     }
 
     ctx->expected_int_lit_type = ident_type;
-    ASTNode *expr_type = check_expr(expr, ctx);
+    ASTNode *expr_type         = check_expr(expr, ctx);
     ctx->expected_int_lit_type = NULL;
     if (expr_type && !can_widen_integer(ident_type, expr_type) &&
         !symtab_same_type(expr_type->data.text.name,
@@ -387,52 +388,52 @@ static void check_assign(ASTNode *assign, SemanticContext *ctx) {
 /* Check expression for semantic errors, returns type of expression */
 static ASTNode *check_expr(ASTNode *expr, SemanticContext *ctx) {
     switch (expr->first_child->kind) {
-        case AST_ADD_EXPR:
-        case AST_SUB_EXPR: {
-            ASTNode *type = check_add_expr(expr->first_child, ctx);
-            expr->type = type;
-            return type;
-        }
-        case AST_MUL_EXPR:
-        case AST_DIV_EXPR:
-        case AST_MOD_EXPR: {
-            ASTNode *type = check_mul_expr(expr->first_child, ctx);
-            expr->type = type;
-            return type;
-        }
-        case AST_NEG_EXPR:
-        case AST_BW_NOT_EXPR: {
-            ASTNode *type = check_unary_expr(expr->first_child, ctx);
-            expr->type = type;
-            return type;
-        }
-        case AST_SHIFT_RIGHT:
-        case AST_SHIFT_LEFT:
-        case AST_BW_AND_EXPR:
-        case AST_BW_XOR_EXPR:
-        case AST_BW_OR_EXPR: {
-            ASTNode *type = check_bitwise_expr(expr->first_child, ctx);
-            expr->type = type;
-            return type;
-        }
-        case AST_INT_LITERAL:
-        case AST_IDENTIFIER:
-        case AST_CALL_EXPR:
-        case AST_EXPRESSION: {
-            ASTNode *type = check_primary(expr->first_child, ctx);
-            expr->type = type;
-            return type;
-        }
-        default:
-            break;
+    case AST_ADD_EXPR:
+    case AST_SUB_EXPR: {
+        ASTNode *type = check_add_expr(expr->first_child, ctx);
+        expr->type    = type;
+        return type;
+    }
+    case AST_MUL_EXPR:
+    case AST_DIV_EXPR:
+    case AST_MOD_EXPR: {
+        ASTNode *type = check_mul_expr(expr->first_child, ctx);
+        expr->type    = type;
+        return type;
+    }
+    case AST_NEG_EXPR:
+    case AST_BW_NOT_EXPR: {
+        ASTNode *type = check_unary_expr(expr->first_child, ctx);
+        expr->type    = type;
+        return type;
+    }
+    case AST_SHIFT_RIGHT:
+    case AST_SHIFT_LEFT:
+    case AST_BW_AND_EXPR:
+    case AST_BW_XOR_EXPR:
+    case AST_BW_OR_EXPR: {
+        ASTNode *type = check_bitwise_expr(expr->first_child, ctx);
+        expr->type    = type;
+        return type;
+    }
+    case AST_INT_LITERAL:
+    case AST_IDENTIFIER:
+    case AST_CALL_EXPR:
+    case AST_EXPRESSION: {
+        ASTNode *type = check_primary(expr->first_child, ctx);
+        expr->type    = type;
+        return type;
+    }
+    default:
+        break;
     }
 
     return NULL;
 }
 
 static ASTNode *check_add_expr(ASTNode *add_expr, SemanticContext *ctx) {
-    ASTNode *lh = add_expr->first_child;
-    ASTNode *rh = lh->next_sibling;
+    ASTNode *lh      = add_expr->first_child;
+    ASTNode *rh      = lh->next_sibling;
 
     ASTNode *lh_type = NULL;
     if (lh->kind >= AST_ADD_EXPR && lh->kind <= AST_SUB_EXPR) {
@@ -476,8 +477,8 @@ static ASTNode *check_add_expr(ASTNode *add_expr, SemanticContext *ctx) {
 }
 
 static ASTNode *check_mul_expr(ASTNode *mul_expr, SemanticContext *ctx) {
-    ASTNode *lh = mul_expr->first_child;
-    ASTNode *rh = lh->next_sibling;
+    ASTNode *lh      = mul_expr->first_child;
+    ASTNode *rh      = lh->next_sibling;
 
     ASTNode *lh_type = NULL;
     if (lh->kind >= AST_ADD_EXPR && lh->kind <= AST_SUB_EXPR) {
@@ -529,8 +530,8 @@ static ASTNode *check_mul_expr(ASTNode *mul_expr, SemanticContext *ctx) {
 
 static ASTNode *check_bitwise_expr(ASTNode *bitwise_expr,
                                    SemanticContext *ctx) {
-    ASTNode *lh = bitwise_expr->first_child;
-    ASTNode *rh = lh->next_sibling;
+    ASTNode *lh      = bitwise_expr->first_child;
+    ASTNode *rh      = lh->next_sibling;
 
     ASTNode *lh_type = NULL;
     if (lh->kind >= AST_ADD_EXPR && lh->kind <= AST_SUB_EXPR) {
@@ -572,7 +573,7 @@ static ASTNode *check_bitwise_expr(ASTNode *bitwise_expr,
     if (bitwise_expr->kind == AST_SHIFT_RIGHT ||
         bitwise_expr->kind == AST_SHIFT_LEFT) {
         if (rh->kind == AST_INT_LITERAL) {
-            size_t size = 0;
+            size_t size   = 0;
             ASTNode *type = promote_integer(lh_type, rh_type);
             if (symtab_same_type(type->data.text.name, "u8") ||
                 symtab_same_type(type->data.text.name, "i8")) {
@@ -609,7 +610,7 @@ static ASTNode *check_bitwise_expr(ASTNode *bitwise_expr,
 }
 
 static ASTNode *check_unary_expr(ASTNode *unary_expr, SemanticContext *ctx) {
-    ASTNode *rh = unary_expr->first_child;
+    ASTNode *rh      = unary_expr->first_child;
 
     ASTNode *rh_type = NULL;
     if (rh->kind >= AST_ADD_EXPR && rh->kind <= AST_SUB_EXPR) {
@@ -635,132 +636,126 @@ static ASTNode *check_unary_expr(ASTNode *unary_expr, SemanticContext *ctx) {
 
 static ASTNode *check_primary(ASTNode *primary, SemanticContext *ctx) {
     switch (primary->kind) {
-        case AST_INT_LITERAL:
-            if (primary->data.int_lit.type) {
-                return primary->data.int_lit.type;
-            }
-
-            if (ctx->expected_int_lit_type) {
-                if (symtab_same_type(ctx->expected_int_lit_type->data.text.name,
-                                     "u8") &&
-                    (primary->data.int_lit.i_val > UINT8_MAX ||
-                     primary->data.int_lit.i_val < 0)) {
-                    report_error(primary->line, primary->column,
-                                 "Number invalid for u8 var");
-                } else if (symtab_same_type(
-                               ctx->expected_int_lit_type->data.text.name,
-                               "u16") &&
-                           (primary->data.int_lit.i_val > UINT16_MAX ||
-                            primary->data.int_lit.i_val < 0)) {
-                    report_error(primary->line, primary->column,
-                                 "Number invalid for u16 var");
-                } else if (symtab_same_type(
-                               ctx->expected_int_lit_type->data.text.name,
-                               "u32") &&
-                           (primary->data.int_lit.i_val > UINT32_MAX ||
-                            primary->data.int_lit.i_val < 0)) {
-                    report_error(primary->line, primary->column,
-                                 "Number invalid for u32 var");
-                } else if (symtab_same_type(
-                               ctx->expected_int_lit_type->data.text.name,
-                               "u64") &&
-                           (primary->data.int_lit.i_val > UINT64_MAX ||
-                            primary->data.int_lit.i_val < 0)) {
-                    report_error(primary->line, primary->column,
-                                 "Number invalid for u64 var");
-                } else if (symtab_same_type(
-                               ctx->expected_int_lit_type->data.text.name,
-                               "i8") &&
-                           (primary->data.int_lit.i_val > INT8_MAX ||
-                            primary->data.int_lit.i_val < INT8_MIN)) {
-                    report_error(primary->line, primary->column,
-                                 "Number invalid for i8 var");
-                } else if (symtab_same_type(
-                               ctx->expected_int_lit_type->data.text.name,
-                               "i16") &&
-                           (primary->data.int_lit.i_val > INT16_MAX ||
-                            primary->data.int_lit.i_val < INT16_MIN)) {
-                    report_error(primary->line, primary->column,
-                                 "Number invalid for i16 var");
-                } else if (symtab_same_type(
-                               ctx->expected_int_lit_type->data.text.name,
-                               "i32") &&
-                           (primary->data.int_lit.i_val > INT32_MAX ||
-                            primary->data.int_lit.i_val < INT32_MIN)) {
-                    report_error(primary->line, primary->column,
-                                 "Number invalid for i32 var");
-                } else if (symtab_same_type(
-                               ctx->expected_int_lit_type->data.text.name,
-                               "i64") &&
-                           (primary->data.int_lit.i_val > INT64_MAX ||
-                            primary->data.int_lit.i_val < INT64_MIN)) {
-                    report_error(primary->line, primary->column,
-                                 "Number invalid for i64 var");
-                }
-
-                primary->data.int_lit.type = ctx->expected_int_lit_type;
-                return primary->data.int_lit.type;
-            } else {
-                const char *type_name = "";
-                if (primary->data.int_lit.i_val <= INT32_MAX &&
-                    primary->data.int_lit.i_val >= INT32_MIN) {
-                    type_name = "i32";
-                } else if (primary->data.int_lit.i_val <= INT64_MAX &&
-                           primary->data.int_lit.i_val >= INT64_MIN) {
-                    type_name = "i64";
-                } else {
-                    report_error(primary->line, primary->column,
-                                 "Number too large for i64");
-                }
-
-                Token ty_tok;
-                ty_tok.line = primary->line;
-                ty_tok.column = primary->column;
-                ty_tok.type = TOKEN_IDENTIFIER;
-                ty_tok.length = str_len(type_name);
-                if (ty_tok.length > MAX_LEXEME) ty_tok.length = MAX_LEXEME;
-
-                for (int i = 0; i < ty_tok.length; i++) {
-                    ty_tok.lexeme[i] = type_name[i];
-                }
-                ty_tok.lexeme[ty_tok.length] = '\0';
-                primary->data.int_lit.type = ast_make_type_name(ty_tok);
-            }
-
+    case AST_INT_LITERAL:
+        if (primary->data.int_lit.type) {
             return primary->data.int_lit.type;
+        }
 
-        case AST_IDENTIFIER: {
-            ASTNode *ty = symtab_find_var(primary->data.text.name);
-            if (!ty) {
+        if (ctx->expected_int_lit_type) {
+            if (symtab_same_type(ctx->expected_int_lit_type->data.text.name,
+                                 "u8") &&
+                (primary->data.int_lit.i_val > UINT8_MAX ||
+                 primary->data.int_lit.i_val < 0)) {
                 report_error(primary->line, primary->column,
-                             "Use of undeclared variable");
-                return NULL;
+                             "Number invalid for u8 var");
+            } else if (symtab_same_type(
+                           ctx->expected_int_lit_type->data.text.name, "u16") &&
+                       (primary->data.int_lit.i_val > UINT16_MAX ||
+                        primary->data.int_lit.i_val < 0)) {
+                report_error(primary->line, primary->column,
+                             "Number invalid for u16 var");
+            } else if (symtab_same_type(
+                           ctx->expected_int_lit_type->data.text.name, "u32") &&
+                       (primary->data.int_lit.i_val > UINT32_MAX ||
+                        primary->data.int_lit.i_val < 0)) {
+                report_error(primary->line, primary->column,
+                             "Number invalid for u32 var");
+            } else if (symtab_same_type(
+                           ctx->expected_int_lit_type->data.text.name, "u64") &&
+                       (primary->data.int_lit.i_val > UINT64_MAX ||
+                        primary->data.int_lit.i_val < 0)) {
+                report_error(primary->line, primary->column,
+                             "Number invalid for u64 var");
+            } else if (symtab_same_type(
+                           ctx->expected_int_lit_type->data.text.name, "i8") &&
+                       (primary->data.int_lit.i_val > INT8_MAX ||
+                        primary->data.int_lit.i_val < INT8_MIN)) {
+                report_error(primary->line, primary->column,
+                             "Number invalid for i8 var");
+            } else if (symtab_same_type(
+                           ctx->expected_int_lit_type->data.text.name, "i16") &&
+                       (primary->data.int_lit.i_val > INT16_MAX ||
+                        primary->data.int_lit.i_val < INT16_MIN)) {
+                report_error(primary->line, primary->column,
+                             "Number invalid for i16 var");
+            } else if (symtab_same_type(
+                           ctx->expected_int_lit_type->data.text.name, "i32") &&
+                       (primary->data.int_lit.i_val > INT32_MAX ||
+                        primary->data.int_lit.i_val < INT32_MIN)) {
+                report_error(primary->line, primary->column,
+                             "Number invalid for i32 var");
+            } else if (symtab_same_type(
+                           ctx->expected_int_lit_type->data.text.name, "i64") &&
+                       (primary->data.int_lit.i_val > INT64_MAX ||
+                        primary->data.int_lit.i_val < INT64_MIN)) {
+                report_error(primary->line, primary->column,
+                             "Number invalid for i64 var");
             }
-            return ty;
-        }
-        case AST_CALL_EXPR: {
-            ASTNode *type = check_call_expr(primary, ctx);
-            primary->type = type;
-            return type;
+
+            primary->data.int_lit.type = ctx->expected_int_lit_type;
+            return primary->data.int_lit.type;
+        } else {
+            const char *type_name = "";
+            if (primary->data.int_lit.i_val <= INT32_MAX &&
+                primary->data.int_lit.i_val >= INT32_MIN) {
+                type_name = "i32";
+            } else if (primary->data.int_lit.i_val <= INT64_MAX &&
+                       primary->data.int_lit.i_val >= INT64_MIN) {
+                type_name = "i64";
+            } else {
+                report_error(primary->line, primary->column,
+                             "Number too large for i64");
+            }
+
+            Token ty_tok;
+            ty_tok.line   = primary->line;
+            ty_tok.column = primary->column;
+            ty_tok.type   = TOKEN_IDENTIFIER;
+            ty_tok.length = str_len(type_name);
+            if (ty_tok.length > MAX_LEXEME)
+                ty_tok.length = MAX_LEXEME;
+
+            for (int i = 0; i < ty_tok.length; i++) {
+                ty_tok.lexeme[i] = type_name[i];
+            }
+            ty_tok.lexeme[ty_tok.length] = '\0';
+            primary->data.int_lit.type   = ast_make_type_name(ty_tok);
         }
 
-        case AST_EXPRESSION: {
-            ASTNode *type = check_expr(primary, ctx);
-            primary->type = type;
-            return type;
-        }
+        return primary->data.int_lit.type;
 
-        default:
-            break;
+    case AST_IDENTIFIER: {
+        ASTNode *ty = symtab_find_var(primary->data.text.name);
+        if (!ty) {
+            report_error(primary->line, primary->column,
+                         "Use of undeclared variable");
+            return NULL;
+        }
+        return ty;
+    }
+    case AST_CALL_EXPR: {
+        ASTNode *type = check_call_expr(primary, ctx);
+        primary->type = type;
+        return type;
+    }
+
+    case AST_EXPRESSION: {
+        ASTNode *type = check_expr(primary, ctx);
+        primary->type = type;
+        return type;
+    }
+
+    default:
+        break;
     }
     return NULL;
 }
 
 static ASTNode *check_call_expr(ASTNode *call_expr, SemanticContext *ctx) {
-    ASTNode *ident = call_expr->first_child;
+    ASTNode *ident    = call_expr->first_child;
     ASTNode *arg_list = ident->next_sibling;
 
-    ASTNode *fn = symtab_find_function(ident->data.text.name);
+    ASTNode *fn       = symtab_find_function(ident->data.text.name);
 
     if (!fn) {
         report_error(ident->line, ident->column, "Call to undefined function");
@@ -768,9 +763,9 @@ static ASTNode *check_call_expr(ASTNode *call_expr, SemanticContext *ctx) {
     }
 
     ASTNode *fn_arg_list = fn->first_child->next_sibling->next_sibling;
-    int fn_arg_count = 0;
+    int fn_arg_count     = 0;
     for (ASTNode *arg = fn_arg_list->first_child; arg;
-         arg = arg->next_sibling) {
+         arg          = arg->next_sibling) {
         fn_arg_count++;
     }
 
@@ -784,12 +779,12 @@ static ASTNode *check_call_expr(ASTNode *call_expr, SemanticContext *ctx) {
                      "Argument count mismatch");
     }
 
-    ASTNode *arg = arg_list->first_child;
+    ASTNode *arg    = arg_list->first_child;
     ASTNode *fn_arg = fn_arg_list->first_child;
     for (int i = 0; i < fn_arg_count; i++) {
-        ASTNode *fn_arg_type = fn_arg->first_child;
+        ASTNode *fn_arg_type       = fn_arg->first_child;
         ctx->expected_int_lit_type = fn_arg_type;
-        ASTNode *arg_type = check_expr(arg, ctx);
+        ASTNode *arg_type          = check_expr(arg, ctx);
         ctx->expected_int_lit_type = NULL;
         if (!can_widen_integer(fn_arg_type, arg_type) &&
             !symtab_same_type(arg_type->data.text.name,
@@ -798,7 +793,7 @@ static ASTNode *check_call_expr(ASTNode *call_expr, SemanticContext *ctx) {
                          "Argument type mismatch in function call");
         }
 
-        arg = arg->next_sibling;
+        arg    = arg->next_sibling;
         fn_arg = fn_arg->next_sibling;
     }
 

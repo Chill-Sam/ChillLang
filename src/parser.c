@@ -23,31 +23,31 @@ ASTNode *parse_program(void) {
 
 /* <function_def> ::= <type> <identifier> ( <param_list> ) <block> */
 ASTNode *parse_function_def(void) {
-    Token tk_ret = expect(TOKEN_IDENTIFIER);
+    Token tk_ret    = expect(TOKEN_IDENTIFIER);
     ASTNode *ret_ty = ast_make_type_name(tk_ret);
 
-    Token tk_name = expect(TOKEN_IDENTIFIER);
-    ASTNode *name = ast_make_identifier(tk_name);
+    Token tk_name   = expect(TOKEN_IDENTIFIER);
+    ASTNode *name   = ast_make_identifier(tk_name);
 
-    expect(TOKEN_LPAREN);  // Starting left parentheses
+    expect(TOKEN_LPAREN); // Starting left parentheses
     ASTNode *params = ast_make_param_list(tk_name.line, tk_name.column);
-    if (!accept(TOKEN_RPAREN)) {  // If no right parantheses immedietly after,
-                                  // must be a param list
+    if (!accept(TOKEN_RPAREN)) { // If no right parantheses immedietly after,
+                                 // must be a param list
         do {
             // each <param> ::= <type> <ident>
             Token p_ty_tok = expect(TOKEN_IDENTIFIER);
-            ASTNode *p_ty = ast_make_type_name(p_ty_tok);
+            ASTNode *p_ty  = ast_make_type_name(p_ty_tok);
 
             Token p_nm_tok = expect(TOKEN_IDENTIFIER);
-            ASTNode *p_nm = ast_make_identifier(p_nm_tok);
+            ASTNode *p_nm  = ast_make_identifier(p_nm_tok);
 
             ast_add_child(params, ast_make_param(p_ty, p_nm));
         } while (
-            accept(TOKEN_COMMA));  // While there are params seperated by commas
-        expect(TOKEN_RPAREN);  // Ending parentheses
+            accept(TOKEN_COMMA)); // While there are params seperated by commas
+        expect(TOKEN_RPAREN); // Ending parentheses
     }
 
-    ASTNode *body = parse_block();  // Following body of the function
+    ASTNode *body = parse_block(); // Following body of the function
     ASTNode *func = ast_make_function_def(ret_ty, name, params, body);
     symtab_add_function(func);
     return func;
@@ -55,7 +55,7 @@ ASTNode *parse_function_def(void) {
 
 /* <block> ::= "{" { <statement> | <block> } "}" */
 ASTNode *parse_block(void) {
-    Token tk = expect(TOKEN_LBRACE);
+    Token tk       = expect(TOKEN_LBRACE);
     ASTNode *block = ast_make_block(tk.line, tk.column);
 
     // Keep parsing statements until right brace
@@ -148,7 +148,7 @@ ASTNode *parse_mut_decl(void) {
 
 /* <return_stmt> ::= return <expression> */
 ASTNode *parse_return_stmt(void) {
-    Token tk_ret = expect(TOKEN_RETURN);  // Used for line and column
+    Token tk_ret  = expect(TOKEN_RETURN); // Used for line and column
     ASTNode *expr = parse_expression();
     return ast_make_return_stmt(expr, tk_ret.line, tk_ret.column);
 }
@@ -185,7 +185,7 @@ ASTNode *parse_logical_or_expr(void) {
     ASTNode *lhs = parse_logical_and_expr();
     while (accept(TOKEN_PIPE)) {
         ASTNode *rhs = parse_logical_and_expr();
-        lhs = ast_make_or_expr(lhs, rhs, lhs->line, lhs->column);
+        lhs          = ast_make_or_expr(lhs, rhs, lhs->line, lhs->column);
     }
     return lhs;
 }
@@ -195,7 +195,7 @@ ASTNode *parse_logical_and_expr(void) {
     ASTNode *lhs = parse_bitwise_or_expr();
     while (accept(TOKEN_AMPERSAND)) {
         ASTNode *rhs = parse_bitwise_or_expr();
-        lhs = ast_make_and_expr(lhs, rhs, lhs->line, lhs->column);
+        lhs          = ast_make_and_expr(lhs, rhs, lhs->line, lhs->column);
     }
     return lhs;
 }
@@ -205,7 +205,7 @@ ASTNode *parse_bitwise_or_expr(void) {
     ASTNode *lhs = parse_bitwise_xor_expr();
     while (accept(TOKEN_PIPE)) {
         ASTNode *rhs = parse_bitwise_xor_expr();
-        lhs = ast_make_or_expr(lhs, rhs, lhs->line, lhs->column);
+        lhs          = ast_make_or_expr(lhs, rhs, lhs->line, lhs->column);
     }
     return lhs;
 }
@@ -215,7 +215,7 @@ ASTNode *parse_bitwise_xor_expr(void) {
     ASTNode *lhs = parse_bitwise_and_expr();
     while (accept(TOKEN_XOR)) {
         ASTNode *rhs = parse_bitwise_and_expr();
-        lhs = ast_make_xor_expr(lhs, rhs, lhs->line, lhs->column);
+        lhs          = ast_make_xor_expr(lhs, rhs, lhs->line, lhs->column);
     }
     return lhs;
 }
@@ -225,7 +225,7 @@ ASTNode *parse_bitwise_and_expr(void) {
     ASTNode *lhs = parse_equality_expr();
     while (accept(TOKEN_AMPERSAND)) {
         ASTNode *rhs = parse_equality_expr();
-        lhs = ast_make_and_expr(lhs, rhs, lhs->line, lhs->column);
+        lhs          = ast_make_and_expr(lhs, rhs, lhs->line, lhs->column);
     }
     return lhs;
 }
@@ -241,8 +241,8 @@ ASTNode *parse_equality_expr(void) {
                 ast_make_logical_equals_expr(lhs, rhs, lhs->line, lhs->column);
         } else if (accept(TOKEN_LOGICAL_NOT_EQUALS)) {
             ASTNode *rhs = parse_relational_expr();
-            lhs = ast_make_logical_not_equals_expr(lhs, rhs, lhs->line,
-                                                   lhs->column);
+            lhs          = ast_make_logical_not_equals_expr(lhs, rhs, lhs->line,
+                                                            lhs->column);
         } else {
             write(STDOUT_FILENO, "ERROR PARSING EQUALITY_EXPR\n", 30);
             return NULL;
@@ -308,10 +308,10 @@ ASTNode *parse_add_expr(void) {
            peek_token().type == TOKEN_MINUS) {
         if (accept(TOKEN_PLUS)) {
             ASTNode *rhs = parse_mul_expr();
-            lhs = ast_make_add_expr(lhs, rhs, lhs->line, lhs->column);
+            lhs          = ast_make_add_expr(lhs, rhs, lhs->line, lhs->column);
         } else if (accept(TOKEN_MINUS)) {
             ASTNode *rhs = parse_mul_expr();
-            lhs = ast_make_sub_expr(lhs, rhs, lhs->line, lhs->column);
+            lhs          = ast_make_sub_expr(lhs, rhs, lhs->line, lhs->column);
         } else {
             write(STDOUT_FILENO, "ERROR PARSING ADD_EXPR\n", 23);
             return NULL;
@@ -329,13 +329,13 @@ ASTNode *parse_mul_expr(void) {
            peek_token().type == TOKEN_PERCENT) {
         if (accept(TOKEN_STAR)) {
             ASTNode *rhs = parse_unary_expr();
-            lhs = ast_make_mul_expr(lhs, rhs, lhs->line, lhs->column);
+            lhs          = ast_make_mul_expr(lhs, rhs, lhs->line, lhs->column);
         } else if (accept(TOKEN_SLASH)) {
             ASTNode *rhs = parse_unary_expr();
-            lhs = ast_make_div_expr(lhs, rhs, lhs->line, lhs->column);
+            lhs          = ast_make_div_expr(lhs, rhs, lhs->line, lhs->column);
         } else if (accept(TOKEN_PERCENT)) {
             ASTNode *rhs = parse_unary_expr();
-            lhs = ast_make_mod_expr(lhs, rhs, lhs->line, lhs->column);
+            lhs          = ast_make_mod_expr(lhs, rhs, lhs->line, lhs->column);
         } else {
             write(STDOUT_FILENO, "ERROR PARSING MUL_EXPR\n", 23);
             return NULL;
@@ -354,10 +354,10 @@ ASTNode *parse_unary_expr(void) {
         expr = parse_primary();
     } else if (accept(TOKEN_MINUS)) {
         ASTNode *rhs = parse_primary();
-        expr = ast_make_neg_expr(rhs, rhs->line, rhs->column);
+        expr         = ast_make_neg_expr(rhs, rhs->line, rhs->column);
     } else if (accept(TOKEN_NOT)) {
         ASTNode *rhs = parse_primary();
-        expr = ast_make_not_expr(rhs, rhs->line, rhs->column);
+        expr         = ast_make_not_expr(rhs, rhs->line, rhs->column);
     } else {
         expr = parse_primary();
     }
@@ -431,7 +431,7 @@ ASTNode *parse_call_expr(void) {
 
 /* <arg_list> ::= <expression> { , <expression> } */
 ASTNode *parse_arg_list(void) {
-    Token tk = peek_token();
+    Token tk          = peek_token();
     ASTNode *arg_list = ast_make_arg_list(tk.line, tk.column);
     do {
         ASTNode *arg = parse_expression();

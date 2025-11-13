@@ -11,22 +11,22 @@ extern ssize_t write(int fd, const void *buf, size_t count);
 extern int close(int fd);
 
 /* needed constants */
-#define O_RDONLY 0
-#define O_WRONLY 1
-#define O_RDWR 2
-#define O_CREAT 0100  /* octal 0100 == decimal 64 */
-#define O_TRUNC 01000 /* octal 01000 == decimal 512 */
+#define O_RDONLY      0
+#define O_WRONLY      1
+#define O_RDWR        2
+#define O_CREAT       0100  /* octal 0100 == decimal 64 */
+#define O_TRUNC       01000 /* octal 01000 == decimal 512 */
 #define STDOUT_FILENO 1
-#define EOF (-1)
+#define EOF           (-1)
 
 /* internal state */
-static int in_fd = -1;
+static int in_fd      = -1;
 static int has_peeked = 0;
 static unsigned char peek_buf;
 
 /* initialize the lexer stream; returns 0 on success */
 int init_stream(const char *filename) {
-    in_fd = open(filename, O_RDONLY, 0);
+    in_fd      = open(filename, O_RDONLY, 0);
     has_peeked = 0;
     return (in_fd < 0) ? -1 : 0;
 }
@@ -60,9 +60,10 @@ int next_char(void) {
     unsigned char c;
     if (has_peeked) {
         has_peeked = 0;
-        c = peek_buf;
+        c          = peek_buf;
     } else {
-        if (in_fd < 0 || read(in_fd, &c, 1) != 1) return EOF;
+        if (in_fd < 0 || read(in_fd, &c, 1) != 1)
+            return EOF;
     }
     if (c == '\n') {
         line++;

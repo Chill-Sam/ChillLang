@@ -1,15 +1,14 @@
 typedef long long sysarg_t;
 extern sysarg_t syscall(sysarg_t number, ...);
 
-#define NULL ((void *)0)
+#define NULL        ((void *)0)
 #define __NR_execve 59
-#define __NR_exit 60
+#define __NR_exit   60
 
 void output(void) {
     /* Command string: run as, then ld */
-    const char cmd[] =
-        "as output.s -o output.o && ld output.o -o program && "
-        "rm output.o";
+    const char cmd[] = "as output.s -o output.o && ld output.o -o program && "
+                       "rm output.o";
 
     /* argv for: /bin/sh -c "<cmd>" */
     char *const argv[] = {"sh", "-c", (char *)cmd, NULL};

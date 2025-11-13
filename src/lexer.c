@@ -5,15 +5,15 @@
 #include "string.c"
 #include "tokens.c"
 
-#define NUM_SIZE 128
+#define NUM_SIZE        128
 #define NUM_SUFFIX_SIZE 8
-#define WORD_SIZE 128
+#define WORD_SIZE       128
 
-#define MAX_LOOKAHEAD 4  // how many tokens you ever want to peek
+#define MAX_LOOKAHEAD   4 // how many tokens you ever want to peek
 static Token lookahead_buf[MAX_LOOKAHEAD];
 static int lookahead_count = 0;
 
-static Token lex_one_token(void);  // core lexing logic
+static Token lex_one_token(void); // core lexing logic
 
 int parse_errors = 0;
 
@@ -43,10 +43,10 @@ Token lex_number_literal(void) {
 
     // Generate token
     Token tok;
-    tok.line = line;
-    tok.column = column;
+    tok.line          = line;
+    tok.column        = column;
 
-    uint64_t val = 0;
+    uint64_t val      = 0;
     IntParseError err = parse_unsigned(number, n_number, &val);
     if (err.type != ERROR_INT_PARSE_OK) {
         size_t len = strlen(err.msg, 64);
@@ -57,10 +57,10 @@ Token lex_number_literal(void) {
     // Handle no suffix
     if (suffix[0] == '\0') {
         if (val <= (uint64_t)INT32_MAX + 1) {
-            tok.type = TOKEN_INT_LITERAL;
+            tok.type           = TOKEN_INT_LITERAL;
             tok.data.literal.i = (int32_t)val;
         } else if (val <= (uint64_t)INT64_MAX + 1) {
-            tok.type = TOKEN_INT_LITERAL;
+            tok.type           = TOKEN_INT_LITERAL;
             tok.data.literal.i = (int64_t)val;
         } else {
             // Should never happen due to previous overflow check
@@ -72,56 +72,56 @@ Token lex_number_literal(void) {
             return make_error_token(line, column, number, n_number,
                                     "Error: Number larger than UINT8_MAX\n");
         }
-        tok.type = TOKEN_U8_LITERAL;
+        tok.type           = TOKEN_U8_LITERAL;
         tok.data.literal.u = (uint64_t)val;
     } else if (str_eq_lit(suffix, 3, "u16")) {
         if (val > UINT16_MAX) {
             return make_error_token(line, column, number, n_number,
                                     "Error: Number larger than UINT16_MAX\n");
         }
-        tok.type = TOKEN_U16_LITERAL;
+        tok.type           = TOKEN_U16_LITERAL;
         tok.data.literal.u = (uint64_t)val;
     } else if (str_eq_lit(suffix, 3, "u32")) {
         if (val > UINT32_MAX) {
             return make_error_token(line, column, number, n_number,
                                     "Error: Number larger than UINT32_MAX\n");
         }
-        tok.type = TOKEN_U32_LITERAL;
+        tok.type           = TOKEN_U32_LITERAL;
         tok.data.literal.u = (uint64_t)val;
     } else if (str_eq_lit(suffix, 3, "u64")) {
         if (val > UINT64_MAX) {
             return make_error_token(line, column, number, n_number,
                                     "Error: Number larger than UINT64_MAX\n");
         }
-        tok.type = TOKEN_U64_LITERAL;
+        tok.type           = TOKEN_U64_LITERAL;
         tok.data.literal.u = (uint64_t)val;
     } else if (str_eq_lit(suffix, 2, "i8")) {
         if (val > (uint64_t)(INT8_MAX) + 1) {
             return make_error_token(line, column, number, n_number,
                                     "Error: Number larger than INT8_MAX\n");
         }
-        tok.type = TOKEN_I8_LITERAL;
+        tok.type           = TOKEN_I8_LITERAL;
         tok.data.literal.i = (uint64_t)val;
     } else if (str_eq_lit(suffix, 3, "i16")) {
         if (val > (uint64_t)(INT16_MAX) + 1) {
             return make_error_token(line, column, number, n_number,
                                     "Error: Number larger than INT16_MAX\n");
         }
-        tok.type = TOKEN_I16_LITERAL;
+        tok.type           = TOKEN_I16_LITERAL;
         tok.data.literal.i = (uint64_t)val;
     } else if (str_eq_lit(suffix, 3, "i32")) {
         if (val > (uint64_t)(INT32_MAX) + 1) {
             return make_error_token(line, column, number, n_number,
                                     "Error: Number larger than INT32_MAX\n");
         }
-        tok.type = TOKEN_I32_LITERAL;
+        tok.type           = TOKEN_I32_LITERAL;
         tok.data.literal.i = (uint64_t)val;
     } else if (str_eq_lit(suffix, 3, "i64")) {
         if (val > (uint64_t)(INT64_MAX) + 1) {
             return make_error_token(line, column, number, n_number,
                                     "Error: Number larger than INT64_MAX\n");
         }
-        tok.type = TOKEN_I64_LITERAL;
+        tok.type           = TOKEN_I64_LITERAL;
         tok.data.literal.i = (uint64_t)val;
     } else {
         return make_error_token(line, column, suffix, n_suffix,
@@ -148,136 +148,136 @@ Token lex_char(void) {
     unsigned char c = (unsigned char)next_char();
 
     Token tok;
-    tok.line = line;
-    tok.column = column;
-    tok.length = 1;
+    tok.line      = line;
+    tok.column    = column;
+    tok.length    = 1;
     tok.lexeme[0] = c;
     tok.lexeme[1] = '\0';
 
     // Parse singular chars
     switch (c) {
-        case '(':
-            tok.type = TOKEN_LPAREN;
+    case '(':
+        tok.type = TOKEN_LPAREN;
+        break;
+    case ')':
+        tok.type = TOKEN_RPAREN;
+        break;
+    case '{':
+        tok.type = TOKEN_LBRACE;
+        break;
+    case '}':
+        tok.type = TOKEN_RBRACE;
+        break;
+    case ';':
+        tok.type = TOKEN_SEMI;
+        break;
+    case '+':
+        tok.type = TOKEN_PLUS;
+        break;
+    case '-':
+        tok.type = TOKEN_MINUS;
+        break;
+    case '*':
+        tok.type = TOKEN_STAR;
+        break;
+    case '/':
+        tok.type = TOKEN_SLASH;
+        break;
+    case '%':
+        tok.type = TOKEN_PERCENT;
+        break;
+    case '=':
+        if (peek_char() == '=') {
+            next_char();
+            tok.length    = 2;
+            tok.lexeme[1] = '=';
+            tok.lexeme[2] = '\0';
+            tok.type      = TOKEN_LOGICAL_EQUALS;
             break;
-        case ')':
-            tok.type = TOKEN_RPAREN;
+        }
+        tok.type = TOKEN_EQUALS;
+        break;
+    case ',':
+        tok.type = TOKEN_COMMA;
+        break;
+    case '<':
+        if (peek_char() == '<') {
+            next_char();
+            tok.length    = 2;
+            tok.lexeme[1] = '<';
+            tok.lexeme[2] = '\0';
+            tok.type      = TOKEN_SHIFT_LEFT;
             break;
-        case '{':
-            tok.type = TOKEN_LBRACE;
+        }
+        if (peek_char() == '=') {
+            next_char();
+            tok.length    = 2;
+            tok.lexeme[1] = '=';
+            tok.lexeme[2] = '\0';
+            tok.type      = TOKEN_LOGICAL_LESS_EQUALS;
             break;
-        case '}':
-            tok.type = TOKEN_RBRACE;
+        }
+        tok.type = TOKEN_LOGICAL_LESS;
+        break;
+    case '>':
+        if (peek_char() == '>') {
+            next_char();
+            tok.length    = 2;
+            tok.lexeme[1] = '<';
+            tok.lexeme[2] = '\0';
+            tok.type      = TOKEN_SHIFT_RIGHT;
             break;
-        case ';':
-            tok.type = TOKEN_SEMI;
+        }
+        if (peek_char() == '=') {
+            next_char();
+            tok.length    = 2;
+            tok.lexeme[1] = '=';
+            tok.lexeme[2] = '\0';
+            tok.type      = TOKEN_LOGICAL_GREATER_EQUALS;
             break;
-        case '+':
-            tok.type = TOKEN_PLUS;
+        }
+        tok.type = TOKEN_LOGICAL_GREATER;
+        break;
+    case '&':
+        if (peek_char() == '&') {
+            next_char();
+            tok.length    = 2;
+            tok.lexeme[1] = '&';
+            tok.lexeme[2] = '\0';
+            tok.type      = TOKEN_LOGICAL_AND;
             break;
-        case '-':
-            tok.type = TOKEN_MINUS;
+        }
+        tok.type = TOKEN_AMPERSAND;
+        break;
+    case '|':
+        if (peek_char() == '|') {
+            next_char();
+            tok.length    = 2;
+            tok.lexeme[1] = '|';
+            tok.lexeme[2] = '\0';
+            tok.type      = TOKEN_LOGICAL_OR;
             break;
-        case '*':
-            tok.type = TOKEN_STAR;
-            break;
-        case '/':
-            tok.type = TOKEN_SLASH;
-            break;
-        case '%':
-            tok.type = TOKEN_PERCENT;
-            break;
-        case '=':
-            if (peek_char() == '=') {
-                next_char();
-                tok.length = 2;
-                tok.lexeme[1] = '=';
-                tok.lexeme[2] = '\0';
-                tok.type = TOKEN_LOGICAL_EQUALS;
-                break;
-            }
-            tok.type = TOKEN_EQUALS;
-            break;
-        case ',':
-            tok.type = TOKEN_COMMA;
-            break;
-        case '<':
-            if (peek_char() == '<') {
-                next_char();
-                tok.length = 2;
-                tok.lexeme[1] = '<';
-                tok.lexeme[2] = '\0';
-                tok.type = TOKEN_SHIFT_LEFT;
-                break;
-            }
-            if (peek_char() == '=') {
-                next_char();
-                tok.length = 2;
-                tok.lexeme[1] = '=';
-                tok.lexeme[2] = '\0';
-                tok.type = TOKEN_LOGICAL_LESS_EQUALS;
-                break;
-            }
-            tok.type = TOKEN_LOGICAL_LESS;
-            break;
-        case '>':
-            if (peek_char() == '>') {
-                next_char();
-                tok.length = 2;
-                tok.lexeme[1] = '<';
-                tok.lexeme[2] = '\0';
-                tok.type = TOKEN_SHIFT_RIGHT;
-                break;
-            }
-            if (peek_char() == '=') {
-                next_char();
-                tok.length = 2;
-                tok.lexeme[1] = '=';
-                tok.lexeme[2] = '\0';
-                tok.type = TOKEN_LOGICAL_GREATER_EQUALS;
-                break;
-            }
-            tok.type = TOKEN_LOGICAL_GREATER;
-            break;
-        case '&':
-            if (peek_char() == '&') {
-                next_char();
-                tok.length = 2;
-                tok.lexeme[1] = '&';
-                tok.lexeme[2] = '\0';
-                tok.type = TOKEN_LOGICAL_AND;
-                break;
-            }
-            tok.type = TOKEN_AMPERSAND;
-            break;
-        case '|':
-            if (peek_char() == '|') {
-                next_char();
-                tok.length = 2;
-                tok.lexeme[1] = '|';
-                tok.lexeme[2] = '\0';
-                tok.type = TOKEN_LOGICAL_OR;
-                break;
-            }
-            tok.type = TOKEN_PIPE;
-            break;
-        case '^':
-            tok.type = TOKEN_XOR;
-            break;
-        case '~':
-            tok.type = TOKEN_NOT;
-            break;
-        case '!':
-            if (peek_char() == '=') {
-                next_char();
-                tok.length = 2;
-                tok.lexeme[1] = '=';
-                tok.lexeme[2] = '\0';
-                tok.type = TOKEN_LOGICAL_NOT_EQUALS;
-            }
-            break;
-        default:
-            tok = make_error_token(line, column, &c, 1,
-                                   "Error: Unknown character while lexing\n");
+        }
+        tok.type = TOKEN_PIPE;
+        break;
+    case '^':
+        tok.type = TOKEN_XOR;
+        break;
+    case '~':
+        tok.type = TOKEN_NOT;
+        break;
+    case '!':
+        if (peek_char() == '=') {
+            next_char();
+            tok.length    = 2;
+            tok.lexeme[1] = '=';
+            tok.lexeme[2] = '\0';
+            tok.type      = TOKEN_LOGICAL_NOT_EQUALS;
+        }
+        break;
+    default:
+        tok = make_error_token(line, column, &c, 1,
+                               "Error: Unknown character while lexing\n");
     }
 
     return tok;
@@ -293,11 +293,11 @@ Token lex_word(void) {
     word[n] = '\0';
 
     Token tok;
-    tok.line = line;
+    tok.line   = line;
     tok.column = column;
     tok.length = n;
 
-    int pos = 0;
+    int pos    = 0;
     while (pos < n && pos < MAX_LEXEME) {
         tok.lexeme[pos] = word[pos];
         pos++;
@@ -337,9 +337,9 @@ Token lex_word(void) {
 }
 
 int lex_init(const char *filename) {
-    parse_errors = 0;
+    parse_errors    = 0;
     lookahead_count = 0;
-    return init_stream(filename);  // your existing init_stream()
+    return init_stream(filename); // your existing init_stream()
 }
 void lex_close(void) { close_stream(); }
 
@@ -391,7 +391,7 @@ static Token lex_one_token(void) {
     } else if (!is_whitespace(c)) {
         return lex_char();
     } else {
-        next_char();  // Consume whitespace
+        next_char(); // Consume whitespace
         return lex_one_token();
     }
 }

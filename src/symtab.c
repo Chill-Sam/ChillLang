@@ -10,9 +10,11 @@ static int num_types = 0;
 int symtab_is_type(const char *name) {
     for (int i = 0; i < num_types; i++) {
         const char *t = type_names[i];
-        int j = 0;
-        while (t[j] && name[j] && t[j] == name[j]) j++;
-        if (t[j] == '\0' && name[j] == '\0') return 1;
+        int j         = 0;
+        while (t[j] && name[j] && t[j] == name[j])
+            j++;
+        if (t[j] == '\0' && name[j] == '\0')
+            return 1;
     }
     return 0;
 }
@@ -37,7 +39,7 @@ int symtab_same_type(const char *a, const char *b) {
 
 typedef struct {
     const char *name;
-    ASTNode *node;  // AST_FUNCTION_DEF
+    ASTNode *node; // AST_FUNCTION_DEF
 } FuncEntry;
 
 static FuncEntry functions[MAX_FUNCS];
@@ -51,8 +53,9 @@ void symtab_add_function(ASTNode *fn_node) {
         if (functions[i].name && fn_node && name) {
             const char *a = functions[i].name;
             const char *b = name;
-            int j = 0;
-            while (a[j] && b[j] && a[j] == b[j]) j++;
+            int j         = 0;
+            while (a[j] && b[j] && a[j] == b[j])
+                j++;
             if (a[j] == '\0' && b[j] == '\0') {
                 write(STDOUT_FILENO, "Error: duplicate function\n", 26);
                 return;
@@ -70,16 +73,18 @@ void symtab_add_function(ASTNode *fn_node) {
 ASTNode *symtab_find_function(const char *name) {
     for (int i = 0; i < num_functions; i++) {
         const char *n = functions[i].name;
-        int j = 0;
-        while (n[j] && name[j] && n[j] == name[j]) j++;
-        if (n[j] == '\0' && name[j] == '\0') return functions[i].node;
+        int j         = 0;
+        while (n[j] && name[j] && n[j] == name[j])
+            j++;
+        if (n[j] == '\0' && name[j] == '\0')
+            return functions[i].node;
     }
     return 0;
 }
 
 // ========== Variable Table (Scoped) ==========
 
-#define MAX_SCOPES 32
+#define MAX_SCOPES         32
 #define MAX_VARS_PER_SCOPE 64
 
 typedef struct {
@@ -129,9 +134,10 @@ int symtab_add_var(const char *name, ASTNode *type_node, int is_mut) {
     // 2) Deduplicate in *this* scope
     for (int i = 0; i < scope->count; i++) {
         const char *n = scope->vars[i].name;
-        int j = 0;
+        int j         = 0;
         // simple strcmp
-        while (n[j] && name[j] && n[j] == name[j]) j++;
+        while (n[j] && name[j] && n[j] == name[j])
+            j++;
         if (n[j] == '\0' && name[j] == '\0') {
             // already declared here
             return 0;
@@ -145,10 +151,10 @@ int symtab_add_var(const char *name, ASTNode *type_node, int is_mut) {
     }
 
     // 4) Install the new entry
-    VarEntry *v = &scope->vars[scope->count++];
-    v->name = name;
+    VarEntry *v  = &scope->vars[scope->count++];
+    v->name      = name;
     v->type_node = type_node;
-    v->is_mut = is_mut;
+    v->is_mut    = is_mut;
     return 1;
 }
 
@@ -157,8 +163,9 @@ ASTNode *symtab_find_var(const char *name) {
         Scope *scope = &var_scopes[s];
         for (int i = 0; i < scope->count; i++) {
             const char *n = scope->vars[i].name;
-            int j = 0;
-            while (n[j] && name[j] && n[j] == name[j]) j++;
+            int j         = 0;
+            while (n[j] && name[j] && n[j] == name[j])
+                j++;
             if (n[j] == '\0' && name[j] == '\0') {
                 return scope->vars[i].type_node;
             }
@@ -172,8 +179,9 @@ int symtab_is_mut(const char *name) {
         Scope *scope = &var_scopes[s];
         for (int i = 0; i < scope->count; i++) {
             const char *n = scope->vars[i].name;
-            int j = 0;
-            while (n[j] && name[j] && n[j] == name[j]) j++;
+            int j         = 0;
+            while (n[j] && name[j] && n[j] == name[j])
+                j++;
             if (n[j] == '\0' && name[j] == '\0') {
                 return scope->vars[i].is_mut;
             }
@@ -186,7 +194,7 @@ int symtab_is_mut(const char *name) {
 // ========== Init & Reset ==========
 
 void symtab_init(void) {
-    num_types = 0;
+    num_types     = 0;
     num_functions = 0;
     current_scope = -1;
 
@@ -201,5 +209,5 @@ void symtab_init(void) {
 }
 
 void symtab_reset(void) {
-    symtab_init();  // just clear all state
+    symtab_init(); // just clear all state
 }

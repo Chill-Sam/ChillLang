@@ -4,7 +4,7 @@
 #include "file_stream.c"
 #include "int.c"
 
-#define MAX_LEXEME 64
+#define MAX_LEXEME  64
 #define MAX_ERR_MSG 64
 
 int lex_errors = 0;
@@ -22,7 +22,7 @@ enum TokenType {
     TOKEN_SLASH,
     TOKEN_PERCENT,
     TOKEN_COMMA,
-    TOKEN_EQUALS,  // 8
+    TOKEN_EQUALS, // 8
     TOKEN_SHIFT_LEFT,
     TOKEN_SHIFT_RIGHT,
     TOKEN_AMPERSAND,
@@ -30,7 +30,7 @@ enum TokenType {
     TOKEN_XOR,
     TOKEN_NOT,
     TOKEN_LOGICAL_EQUALS,
-    TOKEN_LOGICAL_NOT_EQUALS,  // 16
+    TOKEN_LOGICAL_NOT_EQUALS, // 16
     TOKEN_LOGICAL_LESS,
     TOKEN_LOGICAL_GREATER,
     TOKEN_LOGICAL_LESS_EQUALS,
@@ -42,7 +42,7 @@ enum TokenType {
     TOKEN_I8_LITERAL,
     TOKEN_I16_LITERAL,
     TOKEN_I32_LITERAL,
-    TOKEN_I64_LITERAL,  // 24
+    TOKEN_I64_LITERAL, // 24
     TOKEN_INT_LITERAL,
     TOKEN_U8_LITERAL,
     TOKEN_U16_LITERAL,
@@ -91,9 +91,9 @@ Token make_error_token(int line, int column, const char *text, int text_len,
                        const char *err_msg) {
     lex_errors++;
     Token tok;
-    tok.type = TOKEN_ERROR;
+    tok.type   = TOKEN_ERROR;
 
-    tok.line = line;
+    tok.line   = line;
     tok.column = column;
 
     // Copy the offending text into tok.lexeme
@@ -125,31 +125,31 @@ void output_token(Token tok) {
     write(STDOUT_FILENO, ": tokentype\n", 12);
 
     switch (tok.type) {
-        case TOKEN_I8_LITERAL:
-        case TOKEN_I16_LITERAL:
-        case TOKEN_I32_LITERAL:
-        case TOKEN_I64_LITERAL: {
-            char num[64];
-            int n = itoa_int(tok.data.literal.i, num);
-            write(STDOUT_FILENO, num, n);
-            write(STDOUT_FILENO, ": value\n", 8);
-            break;
-        }
+    case TOKEN_I8_LITERAL:
+    case TOKEN_I16_LITERAL:
+    case TOKEN_I32_LITERAL:
+    case TOKEN_I64_LITERAL: {
+        char num[64];
+        int n = itoa_int(tok.data.literal.i, num);
+        write(STDOUT_FILENO, num, n);
+        write(STDOUT_FILENO, ": value\n", 8);
+        break;
+    }
 
-        case TOKEN_U8_LITERAL:
-        case TOKEN_U16_LITERAL:
-        case TOKEN_U32_LITERAL:
-        case TOKEN_U64_LITERAL: {
-            char num[64];
-            int n = itoa_int(tok.data.literal.u, num);
-            write(STDOUT_FILENO, num, n);
-            write(STDOUT_FILENO, ": value\n", 8);
-            break;
-        }
+    case TOKEN_U8_LITERAL:
+    case TOKEN_U16_LITERAL:
+    case TOKEN_U32_LITERAL:
+    case TOKEN_U64_LITERAL: {
+        char num[64];
+        int n = itoa_int(tok.data.literal.u, num);
+        write(STDOUT_FILENO, num, n);
+        write(STDOUT_FILENO, ": value\n", 8);
+        break;
+    }
 
-        default:
-            // not a literal type; nothing to do
-            break;
+    default:
+        // not a literal type; nothing to do
+        break;
     }
 
     if (tok.type == TOKEN_ERROR) {

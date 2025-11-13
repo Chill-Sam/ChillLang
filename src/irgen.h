@@ -6,7 +6,7 @@
 #include "ir_type.h"
 #include "symtab.h"
 
-static int temp_counter = 0;
+static int temp_counter  = 0;
 static int label_counter = 0;
 
 static char *make_name(char prefix);

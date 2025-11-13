@@ -24,7 +24,8 @@ static int strlen(const char *s, int max) {
 static int str_eq_lit(const char *str, int len, const char *lit) {
     int i;
     for (i = 0; i < len; i++) {
-        if (str[i] != lit[i]) return 0;
+        if (str[i] != lit[i])
+            return 0;
     }
     // ensure the literal has no extra characters
     return (lit[i] == '\0');
@@ -33,7 +34,7 @@ static int str_eq_lit(const char *str, int len, const char *lit) {
 // --- tiny itoa: convert int → ASCII digits ---
 // buf must be large enough for "-2147483648" + '\0', say 12 bytes.
 static int itoa_int(int v, char *buf) {
-    char *p = buf;
+    char *p      = buf;
 
     int negative = 0;
     if (v < 0) {
@@ -46,7 +47,7 @@ static int itoa_int(int v, char *buf) {
     // generate digits in reverse order
     do {
         int d = v % 10;
-        *p++ = '0' + d;
+        *p++  = '0' + d;
         v /= 10;
     } while (v);
     if (negative) {
@@ -55,8 +56,8 @@ static int itoa_int(int v, char *buf) {
     // reverse the buffer in-place
     int len = p - buf;
     for (int i = 0; i < len / 2; i++) {
-        char tmp = buf[i];
-        buf[i] = buf[len - 1 - i];
+        char tmp         = buf[i];
+        buf[i]           = buf[len - 1 - i];
         buf[len - 1 - i] = tmp;
     }
     buf[len] = '\0';
@@ -65,14 +66,14 @@ static int itoa_int(int v, char *buf) {
 
 static int is_whitespace(char c) {
     switch (c) {
-        case ' ':   // space
-        case '\t':  // horizontal tab
-        case '\n':  // newline (LF)
-        case '\r':  // carriage return (CR)
-        case '\v':  // vertical tab
-        case '\f':  // form feed
-            return 1;
-        default:
-            return 0;
+    case ' ':  // space
+    case '\t': // horizontal tab
+    case '\n': // newline (LF)
+    case '\r': // carriage return (CR)
+    case '\v': // vertical tab
+    case '\f': // form feed
+        return 1;
+    default:
+        return 0;
     }
 }

@@ -10,32 +10,32 @@ typedef signed char int8_t;
 typedef unsigned char uint8_t;
 
 #define UINT8_MAX ((uint8_t)0xFFU)
-#define INT8_MAX ((int8_t)0x7F)
-#define INT8_MIN ((int8_t)(-INT8_MAX - 1))
+#define INT8_MAX  ((int8_t)0x7F)
+#define INT8_MIN  ((int8_t)(-INT8_MAX - 1))
 
 // 16-bit
 typedef signed short int16_t;
 typedef unsigned short uint16_t;
 
 #define UINT16_MAX ((uint16_t)0xFFFFU)
-#define INT16_MAX ((int16_t)0x7FFF)
-#define INT16_MIN ((int16_t)(-INT16_MAX - 1))
+#define INT16_MAX  ((int16_t)0x7FFF)
+#define INT16_MIN  ((int16_t)(-INT16_MAX - 1))
 
 // 32-bit
 typedef signed int int32_t;
 typedef unsigned int uint32_t;
 
 #define UINT32_MAX ((uint32_t)0xFFFFFFFFUL)
-#define INT32_MAX ((int32_t)0x7FFFFFFF)
-#define INT32_MIN ((int32_t)(-INT32_MAX - 1))
+#define INT32_MAX  ((int32_t)0x7FFFFFFF)
+#define INT32_MIN  ((int32_t)(-INT32_MAX - 1))
 
 // 64-bit
 typedef signed long long int64_t;
 typedef unsigned long long uint64_t;
 
 #define UINT64_MAX ((uint64_t)0xFFFFFFFFFFFFFFFFULL)
-#define INT64_MAX ((int64_t)0x7FFFFFFFFFFFFFFFLL)
-#define INT64_MIN ((int64_t)(-INT64_MAX - 1))
+#define INT64_MAX  ((int64_t)0x7FFFFFFFFFFFFFFFLL)
+#define INT64_MIN  ((int64_t)(-INT64_MAX - 1))
 
 // Error return when parsing integers
 enum IntParseErrorType {
@@ -84,7 +84,7 @@ static IntParseError parse_unsigned(const char *s, int len,
         value = value * 10ULL + digit;
     }
 
-    *out_value = value;
+    *out_value           = value;
     IntParseError err_ok = {.type = ERROR_INT_PARSE_OK, .msg = ""};
     return err_ok;
 }
@@ -100,11 +100,11 @@ static IntParseError parse_signed(const char *s, int len, int64_t *out_value) {
         // too large for signed 64-bit
         IntParseError err = {
             .type = ERROR_INT_PARSE_OVERFLOW,
-            .msg = "Integer overflow in parse_signed: max in INT64_MAX\n"};
+            .msg  = "Integer overflow in parse_signed: max in INT64_MAX\n"};
         return err;
     }
 
-    *out_value = (int64_t)uval;
+    *out_value           = (int64_t)uval;
     IntParseError err_ok = {.type = ERROR_INT_PARSE_OK, .msg = ""};
     return err_ok;
 }
