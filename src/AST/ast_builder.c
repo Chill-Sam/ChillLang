@@ -185,6 +185,70 @@ ASTNode *ast_make_or_expr(ASTNode *lhs, ASTNode *rhs, int line, int column) {
     return e;
 }
 
+ASTNode *ast_make_logical_or_expr(ASTNode *lhs, ASTNode *rhs, int line,
+                                  int column) {
+    ASTNode *e = ast_new(AST_LOGICAL_OR_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_logical_and_expr(ASTNode *lhs, ASTNode *rhs, int line,
+                                   int column) {
+    ASTNode *e = ast_new(AST_LOGICAL_AND_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_logical_equals_expr(ASTNode *lhs, ASTNode *rhs, int line,
+                                      int column) {
+    ASTNode *e = ast_new(AST_LOGICAL_EQUALS_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_logical_not_equals_expr(ASTNode *lhs, ASTNode *rhs, int line,
+                                          int column) {
+    ASTNode *e = ast_new(AST_LOGICAL_NOT_EQUALS_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_logical_less_expr(ASTNode *lhs, ASTNode *rhs, int line,
+                                    int column) {
+    ASTNode *e = ast_new(AST_LOGICAL_LESS_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_logical_greater_expr(ASTNode *lhs, ASTNode *rhs, int line,
+                                       int column) {
+    ASTNode *e = ast_new(AST_LOGICAL_GREATER_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_logical_less_equals_expr(ASTNode *lhs, ASTNode *rhs, int line,
+                                           int column) {
+    ASTNode *e = ast_new(AST_LOGICAL_LESS_EQUALS_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
+ASTNode *ast_make_logical_greater_equals_expr(ASTNode *lhs, ASTNode *rhs,
+                                              int line, int column) {
+    ASTNode *e = ast_new(AST_LOGICAL_GREATER_EQUALS_EXPR, line, column);
+    ast_add_child(e, lhs);
+    ast_add_child(e, rhs);
+    return e;
+}
+
 // <call_expr> ::= <identifier> "(" [ <arg_list> ] ")"
 ASTNode *ast_make_call_expr(ASTNode *fn,
                             ASTNode *arg_list,  // may be NULL

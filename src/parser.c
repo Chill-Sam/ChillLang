@@ -170,12 +170,135 @@ ASTNode *parse_assign_stmt(void) {
     return assign_stmt;
 }
 
-/* <expression> ::= <add_expr> */
+/* <expression> ::= <logical_or_expr> */
 ASTNode *parse_expression(void) {
-    ASTNode *add_expr = parse_add_expr();
-    ASTNode *expr = ast_make_expression(add_expr->line, add_expr->column);
-    ast_add_child(expr, add_expr);
+    // TODO: Switch to logical or expr
+    ASTNode *logical_or_expr = parse_bitwise_or_expr();
+    ASTNode *expr =
+        ast_make_expression(logical_or_expr->line, logical_or_expr->column);
+    ast_add_child(expr, logical_or_expr);
     return expr;
+}
+
+/* <logical_or_expr> ::= <logical_and_expr> { || | or <logical_and_expr> } ; */
+ASTNode *parse_logical_or_expr(void) {
+    ASTNode *lhs = parse_logical_and_expr();
+    while (accept(TOKEN_PIPE)) {
+        ASTNode *rhs = parse_logical_and_expr();
+        lhs = ast_make_or_expr(lhs, rhs, lhs->line, lhs->column);
+    }
+    return lhs;
+}
+
+/* <logical_and_expr> ::= <bitwise_or_expr> { && | and <bitwise_or_expr> } ; */
+ASTNode *parse_logical_and_expr(void) {
+    ASTNode *lhs = parse_bitwise_or_expr();
+    while (accept(TOKEN_AMPERSAND)) {
+        ASTNode *rhs = parse_bitwise_or_expr();
+        lhs = ast_make_and_expr(lhs, rhs, lhs->line, lhs->column);
+    }
+    return lhs;
+}
+
+/* <bitwise_or_expr> ::= <bitwise_xor_expr> { | <bitwise_xor_expr> } ; */
+ASTNode *parse_bitwise_or_expr(void) {
+    ASTNode *lhs = parse_bitwise_xor_expr();
+    while (accept(TOKEN_PIPE)) {
+        ASTNode *rhs = parse_bitwise_xor_expr();
+        lhs = ast_make_or_expr(lhs, rhs, lhs->line, lhs->column);
+    }
+    return lhs;
+}
+
+/* <bitwise_xor_expr> ::= <bitwise_and_expr> { ^ <bitwise_and_expr> } ; */
+ASTNode *parse_bitwise_xor_expr(void) {
+    ASTNode *lhs = parse_bitwise_and_expr();
+    while (accept(TOKEN_XOR)) {
+        ASTNode *rhs = parse_bitwise_and_expr();
+        lhs = ast_make_xor_expr(lhs, rhs, lhs->line, lhs->column);
+    }
+    return lhs;
+}
+
+/* <bitwise_and_expr> ::= <equality_expr> { & <equality_expr> } ; */
+ASTNode *parse_bitwise_and_expr(void) {
+    ASTNode *lhs = parse_equality_expr();
+    while (accept(TOKEN_AMPERSAND)) {
+        ASTNode *rhs = parse_equality_expr();
+        lhs = ast_make_and_expr(lhs, rhs, lhs->line, lhs->column);
+    }
+    return lhs;
+}
+
+/* <equality_expr> ::= <relational_expr> { == | != <relational_expr> } ; */
+ASTNode *parse_equality_expr(void) {
+    ASTNode *lhs = parse_relational_expr();
+    while (peek_token().type == TOKEN_LOGICAL_EQUALS ||
+           peek_token().type == TOKEN_LOGICAL_NOT_EQUALS) {
+        if (accept(TOKEN_LOGICAL_EQUALS)) {
+            ASTNode *rhs = parse_relational_expr();
+            lhs =
+                ast_make_logical_equals_expr(lhs, rhs, lhs->line, lhs->column);
+        } else if (accept(TOKEN_LOGICAL_NOT_EQUALS)) {
+            ASTNode *rhs = parse_relational_expr();
+            lhs = ast_make_logical_not_equals_expr(lhs, rhs, lhs->line,
+                                                   lhs->column);
+        } else {
+            write(STDOUT_FILENO, "ERROR PARSING EQUALITY_EXPR\n", 30);
+            return NULL;
+        }
+    }
+    return lhs;
+}
+
+/* <relational_expr> ::= <shift_expr> { < | > | <= | >= <shift_expr> } ; */
+ASTNode *parse_relational_expr(void) {
+    ASTNode *lhs = parse_shift_expr();
+    while (peek_token().type == TOKEN_LOGICAL_LESS ||
+           peek_token().type == TOKEN_LOGICAL_GREATER ||
+           peek_token().type == TOKEN_LOGICAL_LESS_EQUALS ||
+           peek_token().type == TOKEN_LOGICAL_GREATER_EQUALS) {
+        if (accept(TOKEN_LOGICAL_LESS)) {
+            ASTNode *rhs = parse_shift_expr();
+            lhs = ast_make_logical_less_expr(lhs, rhs, lhs->line, lhs->column);
+        } else if (accept(TOKEN_LOGICAL_GREATER)) {
+            ASTNode *rhs = parse_shift_expr();
+            lhs =
+                ast_make_logical_greater_expr(lhs, rhs, lhs->line, lhs->column);
+        } else if (accept(TOKEN_LOGICAL_LESS_EQUALS)) {
+            ASTNode *rhs = parse_shift_expr();
+            lhs = ast_make_logical_less_equals_expr(lhs, rhs, lhs->line,
+                                                    lhs->column);
+        } else if (accept(TOKEN_LOGICAL_GREATER_EQUALS)) {
+            ASTNode *rhs = parse_shift_expr();
+            lhs = ast_make_logical_greater_equals_expr(lhs, rhs, lhs->line,
+                                                       lhs->column);
+        } else {
+            write(STDOUT_FILENO, "ERROR PARSING RELATIONAL_EXPR\n", 30);
+            return NULL;
+        }
+    }
+    return lhs;
+}
+
+/* <shift_expr> ::= <add_expr> { << | >> } <add_expr> */
+ASTNode *parse_shift_expr(void) {
+    ASTNode *lhs = parse_add_expr();
+    while (peek_token().type == TOKEN_SHIFT_LEFT ||
+           peek_token().type == TOKEN_SHIFT_RIGHT) {
+        if (accept(TOKEN_SHIFT_LEFT)) {
+            ASTNode *rhs = parse_add_expr();
+            lhs = ast_make_shift_left(lhs, rhs, lhs->line, lhs->column);
+        } else if (accept(TOKEN_SHIFT_RIGHT)) {
+            ASTNode *rhs = parse_add_expr();
+            lhs = ast_make_shift_right(lhs, rhs, lhs->line, lhs->column);
+        } else {
+            write(STDOUT_FILENO, "ERROR PARSING SHIFT_EXPR\n", 24);
+            return NULL;
+        }
+    }
+
+    return lhs;
 }
 
 /* <add_expr> ::= <mul_expr> { ( + | - ) <mul_expr> } ; */
@@ -198,54 +321,23 @@ ASTNode *parse_add_expr(void) {
     return lhs;
 }
 
-/* <mul_expr> ::= <bitwise_expr> { * | / | % <bitwise_expr> } ; */
+/* <mul_expr> ::= <unary_expr> { * | / | % <unary_expr> } ; */
 ASTNode *parse_mul_expr(void) {
-    ASTNode *lhs = parse_bitwise_expr();
+    ASTNode *lhs = parse_unary_expr();
     while (peek_token().type == TOKEN_STAR ||
            peek_token().type == TOKEN_SLASH ||
            peek_token().type == TOKEN_PERCENT) {
         if (accept(TOKEN_STAR)) {
-            ASTNode *rhs = parse_bitwise_expr();
+            ASTNode *rhs = parse_unary_expr();
             lhs = ast_make_mul_expr(lhs, rhs, lhs->line, lhs->column);
         } else if (accept(TOKEN_SLASH)) {
-            ASTNode *rhs = parse_bitwise_expr();
+            ASTNode *rhs = parse_unary_expr();
             lhs = ast_make_div_expr(lhs, rhs, lhs->line, lhs->column);
         } else if (accept(TOKEN_PERCENT)) {
-            ASTNode *rhs = parse_bitwise_expr();
+            ASTNode *rhs = parse_unary_expr();
             lhs = ast_make_mod_expr(lhs, rhs, lhs->line, lhs->column);
         } else {
             write(STDOUT_FILENO, "ERROR PARSING MUL_EXPR\n", 23);
-            return NULL;
-        }
-    }
-
-    return lhs;
-}
-
-/* <bitwise_expr> ::= <unary_expr> { ( << | >> | & | ^ | | ) <unary_expr> } */
-ASTNode *parse_bitwise_expr(void) {
-    ASTNode *lhs = parse_unary_expr();
-    while (peek_token().type == TOKEN_SHIFT_LEFT ||
-           peek_token().type == TOKEN_SHIFT_RIGHT ||
-           peek_token().type == TOKEN_AMPERSAND ||
-           peek_token().type == TOKEN_XOR || peek_token().type == TOKEN_PIPE) {
-        if (accept(TOKEN_SHIFT_LEFT)) {
-            ASTNode *rhs = parse_unary_expr();
-            lhs = ast_make_shift_left(lhs, rhs, lhs->line, lhs->column);
-        } else if (accept(TOKEN_SHIFT_RIGHT)) {
-            ASTNode *rhs = parse_unary_expr();
-            lhs = ast_make_shift_right(lhs, rhs, lhs->line, lhs->column);
-        } else if (accept(TOKEN_AMPERSAND)) {
-            ASTNode *rhs = parse_unary_expr();
-            lhs = ast_make_and_expr(lhs, rhs, lhs->line, lhs->column);
-        } else if (accept(TOKEN_XOR)) {
-            ASTNode *rhs = parse_unary_expr();
-            lhs = ast_make_xor_expr(lhs, rhs, lhs->line, lhs->column);
-        } else if (accept(TOKEN_PIPE)) {
-            ASTNode *rhs = parse_unary_expr();
-            lhs = ast_make_or_expr(lhs, rhs, lhs->line, lhs->column);
-        } else {
-            write(STDOUT_FILENO, "ERROR PARSING BITWISE_EXPR\n", 27);
             return NULL;
         }
     }
@@ -273,7 +365,8 @@ ASTNode *parse_unary_expr(void) {
     return expr;
 }
 
-/* <primary> ::= int_lit | "-" int_lit | ident | call_expr | "(" expr ")" */
+/* <primary> ::= int_lit | "-" int_lit | ident | call_expr | "(" expr
+ * ")" */
 ASTNode *parse_primary(void) {
     Token tk = peek_token();
 

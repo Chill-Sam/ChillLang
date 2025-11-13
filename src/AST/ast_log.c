@@ -8,14 +8,42 @@
 // AST Pretty-Printer / Dumper (no external libraries)
 // -----------------------------------------------------------------------------
 
-// If your AST_KIND_COUNT isn’t 15, adjust this array
-static const char *ast_kind_names[] = {
-    "PROGRAM",     "FUNCTION_DEF", "PARAM_LIST",  "PARAM",       "BLOCK",
-    "RETURN_STMT", "CONST_DECL",   "MUT_DECL",    "EXPR_STMT",   "ASSIGN_STMT",
-    "EXPRESSION",  "ADD_EXPR",     "SUB_EXPR",    "MUL_EXPR",    "DIV_EXPR",
-    "MOD_EXPR",    "NEG_EXPR",     "BW_NOT_EXPR", "SHIFT_RIGHT", "SHIFT_LEFT",
-    "BW_AND_EXPR", "BW_XOR_EXPR",  "BW_OR_EXPR",  "CALL_EXPR",   "ARG_LIST",
-    "INT_LITERAL", "IDENTIFIER",   "TYPE_NAME"};
+static const char *ast_kind_names[] = {"PROGRAM",
+                                       "FUNCTION_DEF",
+                                       "PARAM_LIST",
+                                       "PARAM",
+                                       "BLOCK",
+                                       "RETURN_STMT",
+                                       "CONST_DECL",
+                                       "MUT_DECL",
+                                       "EXPR_STMT",
+                                       "ASSIGN_STMT",
+                                       "EXPRESSION",
+                                       "ADD_EXPR",
+                                       "SUB_EXPR",
+                                       "MUL_EXPR",
+                                       "DIV_EXPR",
+                                       "MOD_EXPR",
+                                       "NEG_EXPR",
+                                       "BW_NOT_EXPR",
+                                       "SHIFT_RIGHT",
+                                       "SHIFT_LEFT",
+                                       "BW_AND_EXPR",
+                                       "BW_XOR_EXPR",
+                                       "BW_OR_EXPR",
+                                       "LOGICAL_OR_EXPR",
+                                       "LOGICAL_AND_EXPR",
+                                       "LOGICAL_EQUALS_EXPR",
+                                       "LOGICAL_NOT_EQUALS_EXPR",
+                                       "LOGICAL_LESS_EXPR",
+                                       "LOGICAL_GREATER_EXPR",
+                                       "LOGICAL_LESS_EQUALS_EXPR",
+                                       "LOGICAL_GREATER_EQUALS_EXPR",
+                                       "CALL_EXPR",
+                                       "ARG_LIST",
+                                       "INT_LITERAL",
+                                       "IDENTIFIER",
+                                       "TYPE_NAME"};
 
 // compute length of a NUL-terminated string
 inline static int str_len(const char *s) {

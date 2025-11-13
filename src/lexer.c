@@ -187,6 +187,14 @@ Token lex_char(void) {
             tok.type = TOKEN_PERCENT;
             break;
         case '=':
+            if (peek_char() == '=') {
+                next_char();
+                tok.length = 2;
+                tok.lexeme[1] = '=';
+                tok.lexeme[2] = '\0';
+                tok.type = TOKEN_LOGICAL_EQUALS;
+                break;
+            }
             tok.type = TOKEN_EQUALS;
             break;
         case ',':
@@ -199,7 +207,17 @@ Token lex_char(void) {
                 tok.lexeme[1] = '<';
                 tok.lexeme[2] = '\0';
                 tok.type = TOKEN_SHIFT_LEFT;
+                break;
             }
+            if (peek_char() == '=') {
+                next_char();
+                tok.length = 2;
+                tok.lexeme[1] = '=';
+                tok.lexeme[2] = '\0';
+                tok.type = TOKEN_LOGICAL_LESS_EQUALS;
+                break;
+            }
+            tok.type = TOKEN_LOGICAL_LESS;
             break;
         case '>':
             if (peek_char() == '>') {
@@ -208,12 +226,38 @@ Token lex_char(void) {
                 tok.lexeme[1] = '<';
                 tok.lexeme[2] = '\0';
                 tok.type = TOKEN_SHIFT_RIGHT;
+                break;
             }
+            if (peek_char() == '=') {
+                next_char();
+                tok.length = 2;
+                tok.lexeme[1] = '=';
+                tok.lexeme[2] = '\0';
+                tok.type = TOKEN_LOGICAL_GREATER_EQUALS;
+                break;
+            }
+            tok.type = TOKEN_LOGICAL_GREATER;
             break;
         case '&':
+            if (peek_char() == '&') {
+                next_char();
+                tok.length = 2;
+                tok.lexeme[1] = '&';
+                tok.lexeme[2] = '\0';
+                tok.type = TOKEN_LOGICAL_AND;
+                break;
+            }
             tok.type = TOKEN_AMPERSAND;
             break;
         case '|':
+            if (peek_char() == '|') {
+                next_char();
+                tok.length = 2;
+                tok.lexeme[1] = '|';
+                tok.lexeme[2] = '\0';
+                tok.type = TOKEN_LOGICAL_OR;
+                break;
+            }
             tok.type = TOKEN_PIPE;
             break;
         case '^':
@@ -221,6 +265,15 @@ Token lex_char(void) {
             break;
         case '~':
             tok.type = TOKEN_NOT;
+            break;
+        case '!':
+            if (peek_char() == '=') {
+                next_char();
+                tok.length = 2;
+                tok.lexeme[1] = '=';
+                tok.lexeme[2] = '\0';
+                tok.type = TOKEN_LOGICAL_NOT_EQUALS;
+            }
             break;
         default:
             tok = make_error_token(line, column, &c, 1,
@@ -272,6 +325,10 @@ Token lex_word(void) {
         tok.type = TOKEN_RETURN;
     } else if (str_eq_lit(word, 3, "mut")) {
         tok.type = TOKEN_MUT;
+    } else if (str_eq_lit(word, 3, "and")) {
+        tok.type = TOKEN_LOGICAL_AND;
+    } else if (str_eq_lit(word, 2, "or")) {
+        tok.type = TOKEN_LOGICAL_OR;
     } else {
         tok.type = TOKEN_IDENTIFIER;
     }

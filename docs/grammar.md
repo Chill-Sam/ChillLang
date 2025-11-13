@@ -39,12 +39,19 @@
 <assign_stmt>   ::= <identifier> **=** <expression> ;
 
 # Expressions
-<expression>    ::= <add_expr> ;
+<expression>    ::= <logical_or_expr> ;
 
-<add_expr>      ::= <mul_expr> { ( + | - ) <mul_expr> } ;
-<mul_expr>      ::= <bitwise_expr> { * | / | % <bitwise_expr> } ;
-<bitwise_expr>  ::= <unary_expr> { ( << | >> | & | ^ | | ) <unary_expr> }
-<unary_expr>    ::= { - | ~ } <primary>
+<logical_or_expr> ::= <logical_and_expr> { || | or <logical_and_expr> } ;
+<logical_and_expr> ::= <bitwise_or_expr> { && | and <bitwise_or_expr> } ;
+<bitwise_or_expr>  ::= <bitwise_xor_expr> { | <bitwise_xor_expr> } ;
+<bitwise_xor_expr> ::= <bitwise_and_expr> { ^ <bitwise_and_expr> } ;
+<bitwise_and_expr> ::= <equality_expr> { & <equality_expr> } ;
+<equality_expr>   ::= <relational_expr> { == | != <relational_expr> } ;
+<relational_expr> ::= <shift_expr> { < | > | <= | >= <shift_expr> } ;
+<shift_expr>      ::= <add_expr> { << | >> <add_expr> } ;
+<add_expr>   ::= <mul_expr> { + | - <mul_expr> } ;
+<mul_expr> ::= <unary_expr> { * | / | % <unary_expr> } ;
+<unary_expr>    ::= { - | ~ } <primary> ;
 
 <primary>       ::=
       <integer_literal>
