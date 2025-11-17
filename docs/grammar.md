@@ -3,66 +3,58 @@
 <letter>           ::= "A" … "Z" | "a" … "z" | "_" ;
 <integer_literal>  ::= <digit> { <digit> } [ <suffix> ] ;
 <suffix>           ::= "u8" | "u16" | "u32" | "u64"
-                    | "i8" | "i16" | "i32" | "i64" ;
+                    | "i8" | "i16" | "i32" | "i64" | "f32" | "f64" ;
 <identifier>       ::= <letter> { <letter> | <digit> } ;
+<type>          ::= <identifier> ;
 
 ## single-character tokens: 
 "(" ")" "{" "}" "+" "-" "*" "/" "%" "," ";" "=" "<" ">" "&" "|" "^" "~"
 
 ## keywords: 
-"return" "mut"
+"fun" "return" "mut" "if" "else" "while" "for" "struct" "and" "or" "not"
 
 # Top-level
 <program> ::= { <function_def> } ;
 
 # Function definitions
-<function_def>  ::= <type> <identifier> **(** [ <param_list> ] **)** <block> ;
+<function_def>  ::= fun <identifier> ( [ <param_list> ] ) <type> <block> ;
 
-<param_list>    ::= <param> { **,** <param> } ;
+<param_list>    ::= <param> { , <param> } ;
 <param>         ::= <type> <identifier> ;
 
 # Blocks & statements
-<block>         ::= **{** { <statement> | <block> } **}** ;
+<block>         ::= { { <statement> | <block> } } ;
 
 <statement>     ::=
-      <const_decl> **;**
-    | <mut_decl>   **;**
-    | <return_stmt> **;**
-    | <expr_stmt>  **;**
-    | <assign_stmt> **;**
+      <const_decl> ;
+    | <mut_decl>   ;
+    | <return_stmt> ;
+    | <expr_stmt>  ;
     ;
 
-<const_decl>    ::= <type> <identifier> **=** <expression> ;
-<mut_decl>      ::= **mut** <type> <identifier> [ **=** <expression> ] ;
-<return_stmt>   ::= **return** <expression> ;
+<const_decl>    ::= <type> <identifier> = <expression> ;
+<mut_decl>      ::= mut <type> <identifier> [ = <expression> ] ;
+<return_stmt>   ::= return <expression> ;
 <expr_stmt>     ::= <expression> ;
-<assign_stmt>   ::= <identifier> **=** <expression> ;
+<assign_stmt>   ::= <identifier> = <expression> ;
 
 # Expressions
-<expression>    ::= <logical_or_expr> ;
+<expression>    ::= <assignment> ;
 
-<logical_or_expr> ::= <logical_and_expr> { || | or <logical_and_expr> } ;
-<logical_and_expr> ::= <bitwise_or_expr> { && | and <bitwise_or_expr> } ;
-<bitwise_or_expr>  ::= <bitwise_xor_expr> { | <bitwise_xor_expr> } ;
-<bitwise_xor_expr> ::= <bitwise_and_expr> { ^ <bitwise_and_expr> } ;
-<bitwise_and_expr> ::= <equality_expr> { & <equality_expr> } ;
-<equality_expr>   ::= <relational_expr> { == | != <relational_expr> } ;
-<relational_expr> ::= <shift_expr> { < | > | <= | >= <shift_expr> } ;
-<shift_expr>      ::= <add_expr> { << | >> <add_expr> } ;
-<add_expr>   ::= <mul_expr> { + | - <mul_expr> } ;
-<mul_expr> ::= <unary_expr> { * | / | % <unary_expr> } ;
-<unary_expr>    ::= { - | ~ } <primary> ;
-
-<primary>       ::=
-      <integer_literal>
-    | "-" <integer_literal>
-    | <identifier>
-    | <call_expr>
-    | **(** <expression> **)**
-    ;
-
-<call_expr>     ::= <identifier> **(** [ <arg_list> ] **)** ;
-<arg_list>      ::= <expression> { **,** <expression> } ;
-
-# Types
-<type>          ::= <identifier> ;
+<assignment>   ::= <identifier> = <logical_or> ;
+<logical_or>   ::= <logical_and> { || | or <logical_and> } ;
+<logical_and>  ::= <bitwise_or> { && | and <bitwise_or> } ;
+<bitwise_or>   ::= <bitwise_xor> { | <bitwise_xor> } ;
+<bitwise_xor>  ::= <bitwise_and> { ^ <bitwise_and> } ;
+<bitwise_and>  ::= <equality> { & <equality> } ;
+<equality>     ::= <relational> { == | != <relational> } ;
+<relational>   ::= <shift> { < | > | <= | >= <shift> } ;
+<shift>        ::= <add> { << | >> <add> } ;
+<add>          ::= <mul> { + | - <mul> } ;
+<mul>          ::= <unary> { * | / | % <unary> } ;
+<unary>        ::= { - | ~ } <unary> | <postfix> ;
+<postfix>      ::= <primary> <postfix_tail>* ;
+<postfix_tail> ::= <call> | <member_access> ;
+<call>         ::= ( { <expression> ("," <expression>)* } ) ;
+<member_access> ::= . <identifier> ;
+<primary>       ::= <identifier> | <literal> | ( <expression> ) ;

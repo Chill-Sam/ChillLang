@@ -1,416 +1,627 @@
-#pragma once
+#include "lexer.h"
+#include "token.h"
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include "file_stream.c"
-#include "int.c"
-#include "string.c"
-#include "tokens.c"
+struct Lexer {
+    const char *src;
+    size_t length;
 
-#define NUM_SIZE        128
-#define NUM_SUFFIX_SIZE 8
-#define WORD_SIZE       128
+    const char *cur;
+    const char *end;
 
-#define MAX_LOOKAHEAD   4 // how many tokens you ever want to peek
-static Token lookahead_buf[MAX_LOOKAHEAD];
-static int lookahead_count = 0;
+    uint32_t line;
+    uint32_t column;
 
-static Token lex_one_token(void); // core lexing logic
+    LexerConfig cfg;
 
-int parse_errors = 0;
+    Token lookahead;
+    int has_lookahead;
+};
 
-// Will lex a number starting at current location in input stream
-// Returns a Token based on number
-// Assumes currently starting on a number literal
-Token lex_number_literal(void) {
-    char number[NUM_SIZE + 1];
-    size_t n_number = 0;
-    while (n_number < NUM_SIZE && is_digit(peek_char())) {
-        number[n_number] = (unsigned char)next_char();
-        n_number++;
+static void report(Lexer *lx, const char *msg) {
+    if (lx->cfg.diag_fn) {
+        lx->cfg.diag_fn(lx->cfg.diag_user, lx->line, lx->column, msg);
     }
-    number[n_number] = '\0';
-    // write(STDOUT_FILENO, number, n_number);
-    // write(STDOUT_FILENO, ": number\n", 9);
-
-    char suffix[NUM_SUFFIX_SIZE + 1];
-    size_t n_suffix = 0;
-    while (n_suffix < NUM_SUFFIX_SIZE && is_alnum(peek_char())) {
-        suffix[n_suffix] = (unsigned char)next_char();
-        n_suffix++;
-    }
-    suffix[n_suffix] = '\0';
-    // write(STDOUT_FILENO, suffix, n_suffix);
-    // write(STDOUT_FILENO, ": suffix\n", 9);
-
-    // Generate token
-    Token tok;
-    tok.line          = line;
-    tok.column        = column;
-
-    uint64_t val      = 0;
-    IntParseError err = parse_unsigned(number, n_number, &val);
-    if (err.type != ERROR_INT_PARSE_OK) {
-        size_t len = strlen(err.msg, 64);
-        write(STDOUT_FILENO, err.msg, len);
-        return make_error_token(line, column, number, n_number, err.msg);
-    }
-
-    // Handle no suffix
-    if (suffix[0] == '\0') {
-        if (val <= (uint64_t)INT32_MAX + 1) {
-            tok.type           = TOKEN_INT_LITERAL;
-            tok.data.literal.i = (int32_t)val;
-        } else if (val <= (uint64_t)INT64_MAX + 1) {
-            tok.type           = TOKEN_INT_LITERAL;
-            tok.data.literal.i = (int64_t)val;
-        } else {
-            // Should never happen due to previous overflow check
-            return make_error_token(line, column, number, n_number,
-                                    "Error: Number larger than INT64_MAX\n");
-        }
-    } else if (str_eq_lit(suffix, 2, "u8")) {
-        if (val > UINT8_MAX) {
-            return make_error_token(line, column, number, n_number,
-                                    "Error: Number larger than UINT8_MAX\n");
-        }
-        tok.type           = TOKEN_U8_LITERAL;
-        tok.data.literal.u = (uint64_t)val;
-    } else if (str_eq_lit(suffix, 3, "u16")) {
-        if (val > UINT16_MAX) {
-            return make_error_token(line, column, number, n_number,
-                                    "Error: Number larger than UINT16_MAX\n");
-        }
-        tok.type           = TOKEN_U16_LITERAL;
-        tok.data.literal.u = (uint64_t)val;
-    } else if (str_eq_lit(suffix, 3, "u32")) {
-        if (val > UINT32_MAX) {
-            return make_error_token(line, column, number, n_number,
-                                    "Error: Number larger than UINT32_MAX\n");
-        }
-        tok.type           = TOKEN_U32_LITERAL;
-        tok.data.literal.u = (uint64_t)val;
-    } else if (str_eq_lit(suffix, 3, "u64")) {
-        if (val > UINT64_MAX) {
-            return make_error_token(line, column, number, n_number,
-                                    "Error: Number larger than UINT64_MAX\n");
-        }
-        tok.type           = TOKEN_U64_LITERAL;
-        tok.data.literal.u = (uint64_t)val;
-    } else if (str_eq_lit(suffix, 2, "i8")) {
-        if (val > (uint64_t)(INT8_MAX) + 1) {
-            return make_error_token(line, column, number, n_number,
-                                    "Error: Number larger than INT8_MAX\n");
-        }
-        tok.type           = TOKEN_I8_LITERAL;
-        tok.data.literal.i = (uint64_t)val;
-    } else if (str_eq_lit(suffix, 3, "i16")) {
-        if (val > (uint64_t)(INT16_MAX) + 1) {
-            return make_error_token(line, column, number, n_number,
-                                    "Error: Number larger than INT16_MAX\n");
-        }
-        tok.type           = TOKEN_I16_LITERAL;
-        tok.data.literal.i = (uint64_t)val;
-    } else if (str_eq_lit(suffix, 3, "i32")) {
-        if (val > (uint64_t)(INT32_MAX) + 1) {
-            return make_error_token(line, column, number, n_number,
-                                    "Error: Number larger than INT32_MAX\n");
-        }
-        tok.type           = TOKEN_I32_LITERAL;
-        tok.data.literal.i = (uint64_t)val;
-    } else if (str_eq_lit(suffix, 3, "i64")) {
-        if (val > (uint64_t)(INT64_MAX) + 1) {
-            return make_error_token(line, column, number, n_number,
-                                    "Error: Number larger than INT64_MAX\n");
-        }
-        tok.type           = TOKEN_I64_LITERAL;
-        tok.data.literal.i = (uint64_t)val;
-    } else {
-        return make_error_token(line, column, suffix, n_suffix,
-                                "Error: Invalid suffix\n");
-    }
-
-    tok.length = n_number + n_suffix;
-    // Copy number + suffix to lexeme
-    int pos = 0;
-    while (pos < n_number && pos < MAX_LEXEME) {
-        tok.lexeme[pos] = number[pos];
-        pos++;
-    }
-    while (pos - n_number < n_suffix && pos < MAX_LEXEME) {
-        tok.lexeme[pos] = suffix[pos - n_number];
-        pos++;
-    }
-    tok.lexeme[pos] = '\0';
-
-    return tok;
 }
 
-Token lex_char(void) {
-    unsigned char c = (unsigned char)next_char();
+// NOTE: IMPORTANT: NEEDS TO BE MANUALLY FREED
+Lexer *lexer_create(const char *src, size_t length, LexerConfig cfg) {
+    Lexer *lx = malloc(sizeof *lx);
+    if (!lx)
+        return NULL;
 
-    Token tok;
-    tok.line      = line;
-    tok.column    = column;
-    tok.length    = 1;
-    tok.lexeme[0] = c;
-    tok.lexeme[1] = '\0';
+    lx->src           = src;
+    lx->length        = length;
+    lx->cur           = src;
+    lx->end           = src + length;
+    lx->line          = 1;
+    lx->column        = 1;
+    lx->cfg           = cfg;
+    lx->has_lookahead = 0;
 
-    // Parse singular chars
-    switch (c) {
-    case '(':
-        tok.type = TOKEN_LPAREN;
-        break;
-    case ')':
-        tok.type = TOKEN_RPAREN;
-        break;
-    case '{':
-        tok.type = TOKEN_LBRACE;
-        break;
-    case '}':
-        tok.type = TOKEN_RBRACE;
-        break;
-    case ';':
-        tok.type = TOKEN_SEMI;
-        break;
-    case '+':
-        tok.type = TOKEN_PLUS;
-        break;
-    case '-':
-        tok.type = TOKEN_MINUS;
-        break;
-    case '*':
-        tok.type = TOKEN_STAR;
-        break;
-    case '/':
-        tok.type = TOKEN_SLASH;
-        break;
-    case '%':
-        tok.type = TOKEN_PERCENT;
-        break;
-    case '=':
-        if (peek_char() == '=') {
-            next_char();
-            tok.length    = 2;
-            tok.lexeme[1] = '=';
-            tok.lexeme[2] = '\0';
-            tok.type      = TOKEN_LOGICAL_EQUALS;
-            break;
+    return lx;
+}
+
+void lexer_destroy(Lexer *lx) { free(lx); }
+
+static int at_end(Lexer *lx) { return lx->cur >= lx->end; }
+
+static char peek_char(Lexer *lx) {
+    if (at_end(lx))
+        return '\0';
+    return *lx->cur;
+}
+
+static char peek_next_char(Lexer *lx) {
+    if (at_end(lx))
+        return '\0';
+    return lx->cur[1];
+}
+
+static char advance_char(Lexer *lx) {
+    if (at_end(lx))
+        return '\0';
+    char c = *lx->cur++;
+    if (c == '\n') {
+        lx->line++;
+        lx->column = 1;
+    } else {
+        lx->column++;
+    }
+    return c;
+}
+
+static void skip_whitespace_and_comments(Lexer *lx) {
+    for (;;) {
+        char c = peek_char(lx);
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+            advance_char(lx);
+            continue;
         }
-        tok.type = TOKEN_EQUALS;
-        break;
-    case ',':
-        tok.type = TOKEN_COMMA;
-        break;
-    case '<':
-        if (peek_char() == '<') {
-            next_char();
-            tok.length    = 2;
-            tok.lexeme[1] = '<';
-            tok.lexeme[2] = '\0';
-            tok.type      = TOKEN_SHIFT_LEFT;
-            break;
+
+        if (c == '/' && peek_next_char(lx) == '/') {
+            while (peek_char(lx) != '\n' && !at_end(lx))
+                advance_char(lx);
+            continue;
         }
-        if (peek_char() == '=') {
-            next_char();
-            tok.length    = 2;
-            tok.lexeme[1] = '=';
-            tok.lexeme[2] = '\0';
-            tok.type      = TOKEN_LOGICAL_LESS_EQUALS;
-            break;
+
+        if (c == '/' && peek_next_char(lx) == '*') {
+            advance_char(lx);
+            advance_char(lx);
+            int closed = 0;
+            while (!at_end(lx)) {
+                if (peek_char(lx) == '*' && peek_next_char(lx) == '/') {
+                    advance_char(lx);
+                    advance_char(lx);
+                    closed = 1;
+                    break;
+                }
+                advance_char(lx);
+            }
+            if (!closed)
+                report(lx, "Unterminated comment");
+            continue;
         }
-        tok.type = TOKEN_LOGICAL_LESS;
+
         break;
-    case '>':
-        if (peek_char() == '>') {
-            next_char();
-            tok.length    = 2;
-            tok.lexeme[1] = '<';
-            tok.lexeme[2] = '\0';
-            tok.type      = TOKEN_SHIFT_RIGHT;
-            break;
-        }
-        if (peek_char() == '=') {
-            next_char();
-            tok.length    = 2;
-            tok.lexeme[1] = '=';
-            tok.lexeme[2] = '\0';
-            tok.type      = TOKEN_LOGICAL_GREATER_EQUALS;
-            break;
-        }
-        tok.type = TOKEN_LOGICAL_GREATER;
-        break;
-    case '&':
-        if (peek_char() == '&') {
-            next_char();
-            tok.length    = 2;
-            tok.lexeme[1] = '&';
-            tok.lexeme[2] = '\0';
-            tok.type      = TOKEN_LOGICAL_AND;
-            break;
-        }
-        tok.type = TOKEN_AMPERSAND;
-        break;
-    case '|':
-        if (peek_char() == '|') {
-            next_char();
-            tok.length    = 2;
-            tok.lexeme[1] = '|';
-            tok.lexeme[2] = '\0';
-            tok.type      = TOKEN_LOGICAL_OR;
-            break;
-        }
-        tok.type = TOKEN_PIPE;
-        break;
-    case '^':
-        tok.type = TOKEN_XOR;
-        break;
-    case '~':
-        tok.type = TOKEN_NOT;
-        break;
-    case '!':
-        if (peek_char() == '=') {
-            next_char();
-            tok.length    = 2;
-            tok.lexeme[1] = '=';
-            tok.lexeme[2] = '\0';
-            tok.type      = TOKEN_LOGICAL_NOT_EQUALS;
-        }
-        break;
+    }
+}
+
+typedef struct {
+    const char *name;
+    TokenKind kind;
+} Keyword;
+
+static const Keyword keywords[] = {
+    {"if", TOK_KW_IF},   {"else", TOK_KW_ELSE},     {"while", TOK_KW_WHILE},
+    {"for", TOK_KW_FOR}, {"return", TOK_KW_RETURN}, {"struct", TOK_KW_STRUCT},
+    {"fun", TOK_KW_FUN}, {"mut", TOK_KW_MUT},       {"and", TOK_KW_AND},
+    {"or", TOK_KW_OR},   {"not", TOK_KW_NOT}};
+
+static TokenKind lookup_keyword(const char *start, size_t len) {
+    for (size_t i = 0; i < sizeof keywords / sizeof *keywords; i++) {
+        const Keyword *kw = &keywords[i];
+        if (strlen(kw->name) == len && memcmp(kw->name, start, len) == 0)
+            return kw->kind;
+    }
+    return TOK_IDENT;
+}
+
+static Token make_token(Lexer *lx, TokenKind kind, const char *start) {
+    Token t;
+    t.kind   = kind;
+    t.offset = (uint32_t)(start - lx->src);
+    t.length = (uint32_t)(lx->cur - start);
+    t.line   = lx->line;
+    t.column = lx->column - t.length;
+    t.lexeme = start;
+    return t;
+}
+
+static int is_digit_base(char c, int base) {
+    switch (base) {
+    case 2:
+        return c == '0' || c == '1';
+    case 8:
+        return c >= '0' && c <= '7';
+    case 10:
+        return c >= '0' && c <= '9';
+    case 16:
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+               (c >= 'A' && c <= 'F');
     default:
-        tok = make_error_token(line, column, &c, 1,
-                               "Error: Unknown character while lexing\n");
+        return 0;
     }
-
-    return tok;
 }
 
-Token lex_word(void) {
-    char word[WORD_SIZE + 1];
-    size_t n = 0;
-    while (n < WORD_SIZE && is_alnum(peek_char())) {
-        word[n] = (unsigned char)next_char();
-        n++;
-    }
-    word[n] = '\0';
-
-    Token tok;
-    tok.line   = line;
-    tok.column = column;
-    tok.length = n;
-
-    int pos    = 0;
-    while (pos < n && pos < MAX_LEXEME) {
-        tok.lexeme[pos] = word[pos];
-        pos++;
-    }
-    tok.lexeme[pos] = '\0';
-
-    // if (str_eq_lit(word, 2, "u8")) {
-    //     tok.type = TOKEN_U8;
-    // } else if (str_eq_lit(word, 3, "u16")) {
-    //     tok.type = TOKEN_U16;
-    // } else if (str_eq_lit(word, 3, "u32")) {
-    //     tok.type = TOKEN_U32;
-    // } else if (str_eq_lit(word, 3, "u64")) {
-    //     tok.type = TOKEN_U64;
-    // } else if (str_eq_lit(word, 2, "i8")) {
-    //     tok.type = TOKEN_I8;
-    // } else if (str_eq_lit(word, 3, "i16")) {
-    //     tok.type = TOKEN_I16;
-    // } else if (str_eq_lit(word, 3, "i32")) {
-    //     tok.type = TOKEN_I32;
-    // } else if (str_eq_lit(word, 3, "i64")) {
-    //     tok.type = TOKEN_I64;
-    // }
-    if (str_eq_lit(word, 6, "return")) {
-        tok.type = TOKEN_RETURN;
-    } else if (str_eq_lit(word, 3, "mut")) {
-        tok.type = TOKEN_MUT;
-    } else if (str_eq_lit(word, 3, "and")) {
-        tok.type = TOKEN_LOGICAL_AND;
-    } else if (str_eq_lit(word, 2, "or")) {
-        tok.type = TOKEN_LOGICAL_OR;
-    } else {
-        tok.type = TOKEN_IDENTIFIER;
-    }
-
-    return tok;
-}
-
-int lex_init(const char *filename) {
-    parse_errors    = 0;
-    lookahead_count = 0;
-    return init_stream(filename); // your existing init_stream()
-}
-void lex_close(void) { close_stream(); }
-
-Token next_token(void) {
-    if (lookahead_count > 0) {
-        Token t = lookahead_buf[0];
-
-        // Shift buf down
-        for (int i = 1; i < lookahead_count; i++) {
-            lookahead_buf[i - 1] = lookahead_buf[i];
+static IntSuffixKind make_suffix_kind(int is_unsigned, int width) {
+    if (is_unsigned) {
+        switch (width) {
+        case 8:
+            return INT_SUFFIX_U8;
+        case 16:
+            return INT_SUFFIX_U16;
+        case 32:
+            return INT_SUFFIX_U32;
+        case 64:
+            return INT_SUFFIX_U64;
+        default:
+            return INT_SUFFIX_NONE;
         }
-        lookahead_count--;
+    } else {
+        switch (width) {
+        case 8:
+            return INT_SUFFIX_I8;
+        case 16:
+            return INT_SUFFIX_I16;
+        case 32:
+            return INT_SUFFIX_I32;
+        case 64:
+            return INT_SUFFIX_I64;
+        default:
+            return INT_SUFFIX_NONE;
+        }
+    }
+}
+
+static Token lex_identifier_or_keyword(Lexer *lx, const char *start,
+                                       uint32_t line, uint32_t col) {
+    while (!at_end(lx) &&
+           (isalnum((unsigned char)peek_char(lx)) || peek_char(lx) == '_')) {
+        advance_char(lx);
+    }
+
+    Token t;
+    t.offset       = (uint32_t)(start - lx->src);
+    t.length       = (uint32_t)(lx->cur - start);
+    t.line         = line;
+    t.column       = col;
+    t.lexeme       = start;
+
+    TokenKind kind = lookup_keyword(start, t.length);
+    t.kind         = kind;
+    return t;
+}
+
+static Token lex_number(Lexer *lx, const char *start, uint32_t line,
+                        uint32_t col) {
+    int is_float            = 0;
+    int base                = 10;
+
+    const char *digit_start = start;
+
+    if (*start == '0') {
+        char p = peek_char(lx);
+        if (p == 'x' || p == 'X' || p == 'b' || p == 'B' || p == 'o' ||
+            p == 'O') {
+            advance_char(lx);
+            switch (p) {
+            case 'x':
+            case 'X':
+                base = 16;
+                break;
+            case 'b':
+            case 'B':
+                base = 2;
+                break;
+            case 'o':
+            case 'O':
+                base = 8;
+                break;
+            default:
+                base = 10;
+                break;
+            }
+            digit_start = lx->cur;
+        }
+    }
+
+    while (!at_end(lx) && is_digit_base(peek_char(lx), base)) {
+        advance_char(lx);
+    }
+
+    if (lx->cur == digit_start) {
+        report(lx, "expected digits after base prefix");
+    }
+
+    if (base == 10 && !at_end(lx) && peek_char(lx) == '.' &&
+        isdigit((unsigned char)peek_next_char(lx))) {
+        is_float = 1;
+        advance_char(lx);
+        while (!at_end(lx) && isdigit((unsigned char)peek_char(lx))) {
+            advance_char(lx);
+        }
+    }
+
+    FloatLiteralInfo float_info;
+    IntLiteralInfo int_info;
+    int_info.base = (uint8_t)base;
+
+    if (is_float) {
+        float_info.suffix = FLOAT_SUFFIX_NONE;
+
+        char c            = peek_char(lx);
+        if (c == 'f' || c == 'F') {
+            advance_char(lx);
+            if (at_end(lx) || !isdigit((unsigned char)peek_char(lx))) {
+                report(lx, "missing digits after float suffix");
+            } else {
+                int width = 0;
+                while (!at_end(lx) && isdigit((unsigned char)peek_char(lx))) {
+                    char d = advance_char(lx);
+                    // (d - '0') converts digit char to integer representation
+                    width = width * 10 + (d - '0');
+                }
+
+                FloatSuffixKind suffix = FLOAT_SUFFIX_NONE;
+                if (width == 32) {
+                    suffix = FLOAT_SUFFIX_F32;
+                } else if (width == 64) {
+                    suffix = FLOAT_SUFFIX_F64;
+                }
+                if (suffix == FLOAT_SUFFIX_NONE) {
+                    report(lx, "invalid float width");
+                } else {
+                    float_info.suffix = suffix;
+                }
+            }
+        }
+    } else {
+        char c = peek_char(lx);
+        if (c == 'u' || c == 'U' || c == 'i' || c == 'I') {
+            advance_char(lx);
+            int is_unsigned = c == 'u' || c == 'U';
+
+            if (at_end(lx) || !isdigit((unsigned char)peek_char(lx))) {
+                report(lx, "missing digits after integer suffix");
+            } else {
+                int width = 0;
+                while (!at_end(lx) && isdigit((unsigned char)peek_char(lx))) {
+                    char d = advance_char(lx);
+                    // (d - '0') converts digit char to integer representation
+                    width = width * 10 + (d - '0');
+                }
+
+                IntSuffixKind suffix = make_suffix_kind(is_unsigned, width);
+                if (suffix == INT_SUFFIX_NONE) {
+                    report(lx, "invalid integer width");
+                } else {
+                    int_info.suffix = suffix;
+                }
+            }
+        }
+    }
+
+    Token t;
+    t.offset = (uint32_t)(start - lx->src);
+    t.length = (uint32_t)(lx->cur - start);
+    t.line   = line;
+    t.column = col;
+    t.lexeme = start;
+
+    t.kind   = is_float ? TOK_FLOAT_LITERAL : TOK_INT_LITERAL;
+    if (is_float) {
+        t.lit.float_literal = float_info;
+    } else {
+        t.lit.int_literal = int_info;
+    }
+
+    return t;
+}
+
+static Token lex_string(Lexer *lx, char quote, const char *start, uint32_t line,
+                        uint32_t col) {
+    int is_char = (quote == '\'');
+
+    while (!at_end(lx) && peek_char(lx) != quote) {
+        char c = advance_char(lx);
+        if (c == '\\' && !at_end(lx)) {
+            advance_char(lx);
+        }
+    }
+
+    if (at_end(lx)) {
+        report(lx, "unterminated string literal");
+    } else {
+        advance_char(lx);
+    }
+
+    Token t;
+    t.offset = (uint32_t)(start - lx->src);
+    t.length = (uint32_t)(lx->cur - start);
+    t.line   = line;
+    t.column = col;
+    t.lexeme = start;
+
+    t.kind   = is_char ? TOK_CHAR_LITERAL : TOK_STRING_LITERAL;
+    return t;
+}
+
+static Token lex_token_internal(Lexer *lx) {
+    skip_whitespace_and_comments(lx);
+
+    if (at_end(lx)) {
+        Token t  = {0};
+        t.kind   = TOK_EOF;
+        t.offset = (uint32_t)(lx->src - lx->src);
+        t.length = 0;
+        t.line   = lx->line;
+        t.column = lx->column;
+        t.lexeme = lx->src;
         return t;
     }
 
-    return lex_one_token();
-}
+    const char *start = lx->cur;
+    uint32_t line     = lx->line;
+    uint32_t col      = lx->column;
+    char c            = advance_char(lx);
 
-Token peek_nth(int n) {
-    if (n < 1 || n > MAX_LOOKAHEAD) {
-        write(STDOUT_FILENO, "Error, invalid peek\n", 20);
-        Token eof = {.type = TOKEN_EOF};
-        return eof;
+    if (isalpha((unsigned char)c) || c == '_') {
+        return lex_identifier_or_keyword(lx, start, line, col);
     }
 
-    while (lookahead_count < n) {
-        if (lookahead_count >= MAX_LOOKAHEAD) {
-            write(STDOUT_FILENO, "Error: lookahead overflow\n", 26);
-            break;
+    if (isdigit((unsigned char)c)) {
+        return lex_number(lx, start, line, col);
+    }
+
+    if (c == '\'' || c == '"') {
+        return lex_string(lx, c, start, line, col);
+    }
+
+    TokenKind type = 0;
+    int length     = 1;
+    switch (c) {
+    case '+':
+        if (peek_char(lx) == '=') {
+            advance_char(lx);
+            type   = TOK_PLUS_EQ;
+            length = 2;
+        } else {
+            type = TOK_PLUS;
+        }
+        break;
+    case '-':
+        if (peek_char(lx) == '>') {
+            advance_char(lx);
+            length = 2;
+            type   = TOK_ARROW;
+        }
+        if (peek_char(lx) == '=') {
+            advance_char(lx);
+            length = 2;
+            type   = TOK_MINUS_EQ;
+        } else {
+            type = TOK_MINUS;
+        }
+        break;
+    case '*':
+        if (peek_char(lx) == '=') {
+            advance_char(lx);
+            length = 2;
+            type   = TOK_STAR_EQ;
+        } else {
+            type = TOK_STAR;
+        }
+        break;
+    case '/':
+        if (peek_char(lx) == '=') {
+            advance_char(lx);
+            length = 2;
+            type   = TOK_SLASH_EQ;
+        } else {
+            type = TOK_SLASH;
+        }
+        break;
+    case '%':
+        if (peek_char(lx) == '=') {
+            advance_char(lx);
+            length = 2;
+            type   = TOK_PERCENT_EQ;
+        } else {
+            type = TOK_PERCENT;
+        }
+        break;
+    case '&':
+        if (peek_char(lx) == '&') {
+            advance_char(lx);
+            length = 2;
+            type   = TOK_AMP_AMP;
+        } else if (peek_char(lx) == '=') {
+            advance_char(lx);
+            type = TOK_AMP_EQ;
+        } else {
+            type = TOK_AMP;
+        }
+        break;
+    case '|':
+        if (peek_char(lx) == '|') {
+            advance_char(lx);
+            length = 2;
+            type   = TOK_PIPE_PIPE;
+        } else if (peek_char(lx) == '=') {
+            advance_char(lx);
+            type = TOK_PIPE_EQ;
+        } else {
+            type = TOK_PIPE;
+        }
+        break;
+    case '^':
+        if (peek_char(lx) == '=') {
+            advance_char(lx);
+            length = 2;
+            type   = TOK_CARET_EQ;
+        } else {
+            type = TOK_CARET;
+        }
+        break;
+    case '~':
+        type = TOK_TILDE;
+        break;
+    case '!':
+        if (peek_char(lx) == '=') {
+            advance_char(lx);
+            length = 2;
+            type   = TOK_BANG_EQ;
+        } else {
+            type = TOK_BANG;
+        }
+        break;
+    case '=':
+        if (peek_char(lx) == '=') {
+            advance_char(lx);
+            length = 2;
+            type   = TOK_EQ_EQ;
+        } else {
+            type = TOK_EQ;
+        }
+        break;
+    case '<':
+        if (peek_char(lx) == '<') {
+            advance_char(lx);
+            length = 2;
+            type   = TOK_SHL;
+        } else if (peek_char(lx) == '=') {
+            advance_char(lx);
+            length = 2;
+            type   = TOK_LT_EQ;
+        } else {
+            type = TOK_LT;
+        }
+        break;
+    case '>':
+        if (peek_char(lx) == '>') {
+            advance_char(lx);
+            length = 2;
+            type   = TOK_SHR;
+        } else if (peek_char(lx) == '=') {
+            advance_char(lx);
+            length = 2;
+            type   = TOK_GT_EQ;
+        } else {
+            type = TOK_GT;
+        }
+        break;
+    case '(':
+        type = TOK_LPAREN;
+        break;
+    case ')':
+        type = TOK_RPAREN;
+        break;
+    case '{':
+        type = TOK_LBRACE;
+        break;
+    case '}':
+        type = TOK_RBRACE;
+        break;
+    case '[':
+        type = TOK_LBRACKET;
+        break;
+    case ']':
+        type = TOK_RBRACKET;
+        break;
+    case ',':
+        type = TOK_COMMA;
+        break;
+    case ';':
+        type = TOK_SEMI;
+        break;
+    case ':':
+        type = TOK_COLON;
+        break;
+    case '.':
+        type = TOK_DOT;
+        break;
+    default:
+        report(lx, "unexpected character");
+        type = TOK_INVALID;
+        break;
+    }
+
+    Token t;
+    t.kind   = type;
+    t.offset = (uint32_t)(start - lx->src);
+    t.length = length;
+    t.line   = line;
+    t.column = col;
+    t.lexeme = start;
+    return t;
+}
+
+Token lexer_next(Lexer *lx) {
+    if (lx->has_lookahead) {
+        lx->has_lookahead = 0;
+        return lx->lookahead;
+    }
+    return lex_token_internal(lx);
+}
+
+Token lexer_peek(Lexer *lx) {
+    if (!lx->has_lookahead) {
+        lx->lookahead     = lex_token_internal(lx);
+        lx->has_lookahead = 1;
+    }
+    return lx->lookahead;
+}
+
+void lexer_consume(Lexer *lx) {
+    if (lx->has_lookahead) {
+        lx->has_lookahead = 0;
+    } else {
+        (void)lex_token_internal(lx);
+    }
+}
+
+void lexer_dump(Lexer *lx) {
+    for (;;) {
+        Token t               = lexer_next(lx);
+
+        const char *kind_name = token_kind_name(t.kind);
+
+        printf("%4u:%-3u  %-16s  ", t.line, t.column, kind_name);
+
+        // Print the lexeme safely using length.
+        printf("'");
+        fwrite(t.lexeme, 1, t.length, stdout);
+        printf("'");
+
+        // For integer literals, also show base/suffix to verify lexing logic.
+        if (t.kind == TOK_INT_LITERAL) {
+            printf("  [base=%u suffix=%s]", (unsigned)t.lit.int_literal.base,
+                   int_suffix_name(t.lit.int_literal.suffix));
         }
 
-        lookahead_buf[lookahead_count++] = lex_one_token();
+        // For float literals, also show suffix to verify lexing logic.
+        if (t.kind == TOK_FLOAT_LITERAL) {
+            printf("  [suffix=%s]",
+                   float_suffix_name(t.lit.float_literal.suffix));
+        }
+
+        printf("\n");
+
+        if (t.kind == TOK_EOF) {
+            break;
+        }
     }
-
-    return lookahead_buf[n - 1];
-}
-
-Token peek_token(void) { return peek_nth(1); }
-
-static Token lex_one_token(void) {
-    int c = peek_char();
-    if (c == EOF) {
-        Token eof = {.type = TOKEN_EOF};
-        return eof;
-    } else if (is_digit(c)) {
-        return lex_number_literal();
-    } else if (is_alnum(c)) {
-        return lex_word();
-    } else if (!is_whitespace(c)) {
-        return lex_char();
-    } else {
-        next_char(); // Consume whitespace
-        return lex_one_token();
-    }
-}
-
-// “accept”—if lookahead is t, consume & return true
-static int accept(enum TokenType t) {
-    if (peek_token().type == t) {
-        next_token();
-        return 1;
-    }
-    return 0;
-}
-
-static Token expect(enum TokenType t) {
-    Token tk = next_token();
-    if (tk.type != t) {
-        parse_errors++;
-        write(STDOUT_FILENO, "Unexpected token\n", 17);
-        output_token(tk);
-    }
-    return tk;
 }

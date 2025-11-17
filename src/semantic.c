@@ -1,802 +1,490 @@
+// TODO: Add return type checking
+
 #include "semantic.h"
 
 #include "symtab.h"
+#include "token.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-int semantic_error_count = 0;
+static Scope *g_global_scope = NULL;
 
-int is_integer_type(ASTNode *type) {
-    return symtab_same_type(type->data.text.name, "u8") ||
-           symtab_same_type(type->data.text.name, "u16") ||
-           symtab_same_type(type->data.text.name, "u32") ||
-           symtab_same_type(type->data.text.name, "u64") ||
-           symtab_same_type(type->data.text.name, "i8") ||
-           symtab_same_type(type->data.text.name, "i16") ||
-           symtab_same_type(type->data.text.name, "i32") ||
-           symtab_same_type(type->data.text.name, "i64");
+static char *token_to_cstr(const Token *tok) {
+    char *s = malloc(tok->length + 1);
+    if (!s) {
+        fprintf(stderr, "fatal: out of memory in token_to_cstr\n");
+        abort();
+    }
+    memcpy(s, tok->lexeme, tok->length);
+    s[tok->length] = '\0';
+    return s;
 }
 
-int can_widen_integer(ASTNode *to, ASTNode *from) {
-    if (symtab_same_type(to->data.text.name, "u8")) {
-        if (symtab_same_type(from->data.text.name, "u8")) {
-            return 1;
-        } else {
-            return 0;
-        }
+// TODO: Replace with proper diagnostics system
+static void sema_fatal(const Token *where, const char *msg) {
+    if (where) {
+        fprintf(stderr, "sema error at %u:%u: %s (near '%.*s')\n", where->line,
+                where->column, msg, (int)where->length, where->lexeme);
+    } else {
+        fprintf(stderr, "sema error: %s\n", msg);
     }
-
-    if (symtab_same_type(to->data.text.name, "u16")) {
-        if (symtab_same_type(from->data.text.name, "u8")) {
-            return 1;
-        } else if (symtab_same_type(from->data.text.name, "u16")) {
-            return 1;
-        } else {
-            return 0;
-        }
-    }
-
-    if (symtab_same_type(to->data.text.name, "u32")) {
-        if (symtab_same_type(from->data.text.name, "u8")) {
-            return 1;
-        } else if (symtab_same_type(from->data.text.name, "u16")) {
-            return 1;
-        } else if (symtab_same_type(from->data.text.name, "u32")) {
-            return 1;
-        } else {
-            return 0;
-        }
-    }
-
-    if (symtab_same_type(to->data.text.name, "u64")) {
-        if (symtab_same_type(from->data.text.name, "u8")) {
-            return 1;
-        } else if (symtab_same_type(from->data.text.name, "u16")) {
-            return 1;
-        } else if (symtab_same_type(from->data.text.name, "u32")) {
-            return 1;
-        } else if (symtab_same_type(from->data.text.name, "u64")) {
-            return 1;
-        } else {
-            return 0;
-        }
-    }
-
-    if (symtab_same_type(to->data.text.name, "i8")) {
-        if (symtab_same_type(from->data.text.name, "i8")) {
-            return 1;
-        } else {
-            return 0;
-        }
-    }
-
-    if (symtab_same_type(to->data.text.name, "i16")) {
-        if (symtab_same_type(from->data.text.name, "i8")) {
-            return 1;
-        } else if (symtab_same_type(from->data.text.name, "i16")) {
-            return 1;
-        } else {
-            return 0;
-        }
-    }
-
-    if (symtab_same_type(to->data.text.name, "i32")) {
-        if (symtab_same_type(from->data.text.name, "i8")) {
-            return 1;
-        } else if (symtab_same_type(from->data.text.name, "i16")) {
-            return 1;
-        } else if (symtab_same_type(from->data.text.name, "i32")) {
-            return 1;
-        } else {
-            return 0;
-        }
-    }
-
-    if (symtab_same_type(to->data.text.name, "i64")) {
-        if (symtab_same_type(from->data.text.name, "i8")) {
-            return 1;
-        } else if (symtab_same_type(from->data.text.name, "i16")) {
-            return 1;
-        } else if (symtab_same_type(from->data.text.name, "i32")) {
-            return 1;
-        } else if (symtab_same_type(from->data.text.name, "i64")) {
-            return 1;
-        } else {
-            return 0;
-        }
-    }
-    return 0;
+    exit(1);
 }
 
-ASTNode *promote_integer(ASTNode *a, ASTNode *b) {
-    if (symtab_same_type(a->data.text.name, "u8")) {
-        if (symtab_same_type(b->data.text.name, "u8")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "u16")) {
-            return b;
-        } else if (symtab_same_type(b->data.text.name, "u32")) {
-            return b;
-        } else if (symtab_same_type(b->data.text.name, "u64")) {
-            return b;
-        } else {
-            return NULL;
+static void sema_init_builtin_types(Scope *global) {
+    types_init();
+
+    struct Builtin {
+        const char *name;
+        TypeId id;
+    } builtins[] = {
+        {"void", TYPEID_VOID}, {"bool", TYPEID_BOOL}, {"i8", TYPEID_I8},
+        {"u8", TYPEID_U8},     {"i16", TYPEID_I16},   {"u16", TYPEID_U16},
+        {"i32", TYPEID_I32},   {"u32", TYPEID_U32},   {"i64", TYPEID_I64},
+        {"u64", TYPEID_U64},   {"f32", TYPEID_F32},   {"f64", TYPEID_F64},
+    };
+
+    for (size_t i = 0; i < sizeof(builtins) / sizeof(builtins[0]); i++) {
+        if (!scope_define_type(global, builtins[i].name, builtins[i].id)) {
+            fprintf(stderr, "fatal: builtin type '%s' redeclared\n",
+                    builtins[i].name);
+            exit(1);
         }
     }
-
-    if (symtab_same_type(a->data.text.name, "u16")) {
-        if (symtab_same_type(b->data.text.name, "u8")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "u16")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "u32")) {
-            return b;
-        } else if (symtab_same_type(b->data.text.name, "u64")) {
-            return b;
-        } else {
-            return NULL;
-        }
-    }
-
-    if (symtab_same_type(a->data.text.name, "u32")) {
-        if (symtab_same_type(b->data.text.name, "u8")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "u16")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "u32")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "u64")) {
-            return b;
-        } else {
-            return NULL;
-        }
-    }
-
-    if (symtab_same_type(a->data.text.name, "u64")) {
-        if (symtab_same_type(b->data.text.name, "u8")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "u16")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "u32")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "u64")) {
-            return a;
-        } else {
-            return NULL;
-        }
-    }
-
-    if (symtab_same_type(a->data.text.name, "i8")) {
-        if (symtab_same_type(b->data.text.name, "i8")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "i16")) {
-            return b;
-        } else if (symtab_same_type(b->data.text.name, "i32")) {
-            return b;
-        } else if (symtab_same_type(b->data.text.name, "i64")) {
-            return b;
-        } else {
-            return NULL;
-        }
-    }
-
-    if (symtab_same_type(a->data.text.name, "i16")) {
-        if (symtab_same_type(b->data.text.name, "i8")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "i16")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "i32")) {
-            return b;
-        } else if (symtab_same_type(b->data.text.name, "i64")) {
-            return b;
-        } else {
-            return NULL;
-        }
-    }
-
-    if (symtab_same_type(a->data.text.name, "i32")) {
-        if (symtab_same_type(b->data.text.name, "i8")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "i16")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "i32")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "i64")) {
-            return b;
-        } else {
-            return NULL;
-        }
-    }
-
-    if (symtab_same_type(a->data.text.name, "i64")) {
-        if (symtab_same_type(b->data.text.name, "i8")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "i16")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "i32")) {
-            return a;
-        } else if (symtab_same_type(b->data.text.name, "i64")) {
-            return a;
-        } else {
-            return NULL;
-        }
-    }
-
-    return NULL;
 }
 
-// Entry point
-void semantic_check(ASTNode *program) {
-    semantic_error_count = 0;
-    SemanticContext ctx  = {.return_type = NULL};
+static TypeId sema_resolve_type_name(Scope *scope, AstNode *type_expr) {
+    if (!type_expr || type_expr->kind != AST_IDENT_EXPR) {
+        sema_fatal(NULL, "internal error: expected IDENT_EXPR as type name");
+    }
 
-    check_node(program, &ctx);
+    Token *name_tok = &type_expr->as.ident_expr.name;
+    char *name      = token_to_cstr(name_tok);
+
+    Symbol *sym     = scope_lookup(scope, name);
+    free(name);
+
+    if (!sym || sym->kind != SYM_TYPE) {
+        sema_fatal(name_tok, "unknown type name");
+    }
+
+    return sym->as.type.type_id;
 }
 
-static void report_error(int line, int col, const char *msg) {
-    semantic_error_count++;
-    write(STDOUT_FILENO, "Semantic error: ", 16);
-    write(STDOUT_FILENO, msg, str_len(msg));
-    write(STDOUT_FILENO, " @ ", 3);
+// First pass of semantic analysis
+static void sema_pass1_collect_globals(AstNode *tu, Scope *global) {
+    if (!tu || tu->kind != AST_TRANSLATION_UNIT) {
+        sema_fatal(NULL, "internal error: expected TRANSLATION_UNIT");
+    }
 
-    char buf[32];
-    int len = itoa64(line, buf);
-    write(STDOUT_FILENO, buf, len);
-    write(STDOUT_FILENO, ":", 1);
-    len = itoa64(col, buf);
-    write(STDOUT_FILENO, buf, len);
-    write(STDOUT_FILENO, "\n", 1);
+    AstNodeList *items = &tu->as.translation_unit.items;
+
+    for (uint32_t i = 0; i < items->count; i++) {
+        AstNode *item = items->items[i];
+        switch (item->kind) {
+        case AST_STRUCT_DECL: {
+            Token *name_token = &item->as.struct_decl.name;
+            char *name        = token_to_cstr(name_token);
+            Type t            = type_make_struct(item);
+            TypeId tid        = type_add(t);
+            if (!scope_define_type(global, name, tid)) {
+                free(name);
+                sema_fatal(name_token, "redefinition of type");
+            }
+            free(name);
+            break;
+        }
+
+        case AST_FUNC_DECL: {
+            Token *name_token = &item->as.func_decl.name;
+            char *name        = token_to_cstr(name_token);
+
+            if (!scope_define_func(global, name, item)) {
+                free(name);
+                sema_fatal(name_token, "redefinition of function");
+            }
+            free(name);
+            break;
+        }
+
+        default:
+            sema_fatal(NULL, "internal error: unknown top-level AST node kind");
+        }
+    }
 }
 
-static void check_node(ASTNode *node, SemanticContext *ctx) {
-    if (!node)
-        return;
+// Second pass of semantic analysis
+static TypeId sema_expr(Scope *scope, AstNode *expr);
+static void sema_stmt(Scope *scope, AstNode *stmt);
+static void sema_block(Scope *parent_scope, AstNode *block);
 
-    switch (node->kind) {
-    case AST_FUNCTION_DEF:
-        check_function_def(node, ctx);
+static TypeId sema_expr_ident(Scope *scope, AstNode *expr) {
+    Token *name_token = &expr->as.ident_expr.name;
+    char *name        = token_to_cstr(name_token);
+    Symbol *sym       = scope_lookup(scope, name);
+    free(name);
+
+    if (!sym) {
+        sema_fatal(name_token, "use of undeclared identifier");
+    }
+
+    switch (sym->kind) {
+    case SYM_VAR:
+        return sym->as.var.type_id;
+    case SYM_FUNC:
+        // TODO: Maybe update to allow first-class functions
+        sema_fatal(name_token, "functions are not first-class yet");
         break;
+    case SYM_TYPE:
+        sema_fatal(name_token, "type name used as value");
+        break;
+    }
+    sema_fatal(name_token, "internal error: unknown symbol kind");
+    return TYPEID_VOID; // unreachable
+}
 
-    case AST_BLOCK:
-        if (!(node->parent && node->parent->kind == AST_FUNCTION_DEF)) {
-            symtab_push_scope();
+// NOTE: Temporary implementation
+static TypeId sema_expr_literal(AstNode *expr) {
+    Token *tok = &expr->as.literal_expr.tok;
+    switch (tok->kind) {
+    case TOK_INT_LITERAL: {
+        IntLiteralInfo info = tok->lit.int_literal;
+        switch (info.suffix) {
+        case INT_SUFFIX_I8:
+            return TYPEID_I8;
+        case INT_SUFFIX_I16:
+            return TYPEID_I16;
+        case INT_SUFFIX_I32:
+            return TYPEID_I32;
+        case INT_SUFFIX_I64:
+            return TYPEID_I64;
+        case INT_SUFFIX_U8:
+            return TYPEID_U8;
+        case INT_SUFFIX_U16:
+            return TYPEID_U16;
+        case INT_SUFFIX_U32:
+            return TYPEID_U32;
+        case INT_SUFFIX_U64:
+            return TYPEID_U64;
+        case INT_SUFFIX_NONE:
+        default:
+            // Default integer type: i32
+            return TYPEID_I32;
         }
-        break;
+    }
 
-    case AST_CONST_DECL:
-    case AST_MUT_DECL:
-        check_decl(node, ctx);
+    case TOK_FLOAT_LITERAL: {
+        FloatLiteralInfo info = tok->lit.float_literal;
+        switch (info.suffix) {
+        case FLOAT_SUFFIX_F32:
+            return TYPEID_F32;
+        case FLOAT_SUFFIX_F64:
+            return TYPEID_F64;
+        case FLOAT_SUFFIX_NONE:
+        default:
+            // Default float type: f32
+            return TYPEID_F32;
+        }
+    }
+
+    case TOK_CHAR_LITERAL:
+        // NOTE: Reusing I32 for now
+        return TYPEID_I32;
+
+    case TOK_STRING_LITERAL:
+        // TODO: Provide proper pointer type
+        return TYPEID_VOID;
+
+    default:
+        sema_fatal(tok, "internal error: unknown literal kind");
+    }
+
+    return TYPEID_VOID; // unreachable
+}
+
+static TypeId sema_expr_member(Scope *scope, AstNode *expr) {
+    AstMemberExpr *member = &expr->as.member_expr;
+    TypeId base_type      = sema_expr(scope, member->base);
+    const Type *base_t    = type_get(base_type);
+
+    if (base_t->kind != TYPE_STRUCT) {
+        sema_fatal(&member->field, "member access on non-struct type");
+    }
+
+    AstNode *struct_decl = base_t->struct_decl;
+    AstNodeList *fields  = &struct_decl->as.struct_decl.fields;
+    Token *field_tok     = &expr->as.member_expr.field;
+
+    for (uint32_t i = 0; i < fields->count; i++) {
+        AstNode *field  = fields->items[i];
+        Token *name_tok = &field->as.field.name;
+        if (name_tok->length == field_tok->length &&
+            memcmp(name_tok->lexeme, field_tok->lexeme, field_tok->length) ==
+                0) {
+            return sema_resolve_type_name(g_global_scope, field->as.field.type);
+        }
+    }
+
+    sema_fatal(field_tok, "unknown field");
+    return TYPEID_VOID; // unreachable
+}
+
+static TypeId sema_expr_assign(Scope *scope, AstNode *expr) {
+    AstAssignExpr *assign = &expr->as.assign_expr;
+
+    // TODO: Allow other types of assignment
+    if (assign->op != ASSIGN_EQ) {
+        sema_fatal(NULL, "internal error: unknown assignment operator");
+    }
+
+    bool lhs_mut    = false;
+    TypeId lhs_type = TYPEID_VOID;
+
+    if (assign->lhs->kind == AST_IDENT_EXPR) {
+        Token *name_tok = &assign->lhs->as.ident_expr.name;
+        char *name      = token_to_cstr(name_tok);
+        Symbol *sym     = scope_lookup(scope, name);
+        free(name);
+
+        if (!sym) {
+            sema_fatal(name_tok, "use of undeclared identifier");
+        }
+
+        if (sym->kind != SYM_VAR) {
+            sema_fatal(name_tok,
+                       "left-hand side of assignment is not a mutable var");
+        }
+
+        lhs_type = sym->as.var.type_id;
+        lhs_mut  = sym->as.var.is_mut;
+    } else if (assign->lhs->kind == AST_MEMBER_EXPR) {
+        lhs_type = sema_expr_member(scope, assign->lhs);
+        lhs_mut  = true;
+    } else {
+        sema_fatal(NULL,
+                   "internal error: unknown left-hand side of assignment");
+    }
+
+    if (!lhs_mut) {
+        sema_fatal(&assign->lhs->as.ident_expr.name,
+                   "cannot assign to immutable");
+    }
+
+    TypeId rhs_type = sema_expr(scope, assign->rhs);
+
+    // TODO: Allow type promotion
+    if (lhs_type != rhs_type) {
+        if (assign->lhs->kind == AST_MEMBER_EXPR) {
+            sema_fatal(&assign->lhs->as.member_expr.field,
+                       "type mismatch in member assignment");
+        } else {
+            sema_fatal(&assign->lhs->as.ident_expr.name,
+                       "type mismatch in assignment");
+        }
+    }
+
+    return lhs_type;
+}
+
+static TypeId sema_expr_bin(Scope *scope, AstNode *expr) {
+    AstBinExpr *bin = &expr->as.bin_expr;
+    TypeId lhs_type = sema_expr(scope, bin->lhs);
+    TypeId rhs_type = sema_expr(scope, bin->rhs);
+
+    // TODO: Allow type promotion
+    if (lhs_type != rhs_type) {
+        sema_fatal(NULL, "type mismatch in binary expression");
+    }
+
+    // TODO: Handle comparison operators
+    return lhs_type;
+}
+
+static TypeId sema_expr_unary(Scope *scope, AstNode *expr) {
+    AstUnaryExpr *unary = &expr->as.unary_expr;
+    TypeId expr_type    = sema_expr(scope, unary->expr);
+
+    // TODO: allows any numeric type, refine later
+    return expr_type;
+}
+
+static TypeId sema_expr_call(Scope *scope, AstNode *expr) {
+    AstCallExpr *call = &expr->as.call_expr;
+
+    if (call->callee->kind != AST_IDENT_EXPR) {
+        sema_fatal(NULL, "only simple function calls are supported");
+    }
+
+    Token *name_tok = &call->callee->as.ident_expr.name;
+    char *name      = token_to_cstr(name_tok);
+    Symbol *sym     = scope_lookup(scope, name);
+    free(name);
+
+    if (!sym || sym->kind != SYM_FUNC) {
+        sema_fatal(name_tok, "call to undeclared function");
+    }
+
+    AstNode *fn         = sym->as.func.func_decl;
+    AstNodeList *params = &fn->as.func_decl.params;
+
+    if (params->count != call->args.count) {
+        sema_fatal(name_tok, "wrong number of arguments");
+    }
+
+    // TODO: Check argument types
+
+    if (!fn->as.func_decl.return_type) {
+        return TYPEID_VOID;
+    }
+
+    return sema_resolve_type_name(g_global_scope, fn->as.func_decl.return_type);
+}
+
+static TypeId sema_expr(Scope *scope, AstNode *expr) {
+    switch (expr->kind) {
+    case AST_IDENT_EXPR:
+        return sema_expr_ident(scope, expr);
+
+    case AST_LITERAL_EXPR:
+        return sema_expr_literal(expr);
+
+    case AST_MEMBER_EXPR:
+        return sema_expr_member(scope, expr);
+
+    case AST_ASSIGN_EXPR:
+        return sema_expr_assign(scope, expr);
+
+    case AST_BIN_EXPR:
+        return sema_expr_bin(scope, expr);
+
+    case AST_UNARY_EXPR:
+        return sema_expr_unary(scope, expr);
+
+    case AST_CALL_EXPR:
+        return sema_expr_call(scope, expr);
+
+    default:
+        sema_fatal(NULL, "internal error: unexpected expr node kind");
+    }
+
+    return TYPEID_VOID; // unreachable
+}
+
+static void sema_stmt(Scope *scope, AstNode *stmt) {
+    switch (stmt->kind) {
+    case AST_VAR_DECL: {
+        AstVarDecl *var = &stmt->as.var_decl;
+        TypeId type_id  = sema_resolve_type_name(scope, var->type);
+        char *name      = token_to_cstr(&var->name);
+        if (!scope_define_var(scope, name, type_id, var->is_mut, stmt)) {
+            free(name);
+            sema_fatal(&var->name, "redefinition of variable in same scope");
+        }
+        free(name);
+
+        // Force initialization of immutable variables
+        if (!var->is_mut && !var->init) {
+            sema_fatal(&var->name, "uninitialized constant variable");
+        }
+
+        // Check if the variable is initialized
+        if (var->init) {
+            TypeId init_type = sema_expr(scope, var->init);
+            if (type_id != init_type) {
+                sema_fatal(&stmt->as.var_decl.name,
+                           "type mismatch in variable initialization");
+            }
+        }
+
         break;
+    }
+
+    case AST_EXPR_STMT: {
+        if (stmt->as.expr_stmt.expr) {
+            (void)sema_expr(scope, stmt->as.expr_stmt.expr);
+        }
+
+        break;
+    }
 
     case AST_RETURN_STMT:
-        check_return(node, ctx);
+        if (stmt->as.return_stmt.expr) {
+            (void)sema_expr(scope, stmt->as.return_stmt.expr);
+        }
         break;
 
-    case AST_ASSIGN_STMT:
-        check_assign(node, ctx);
-        break;
-
-    case AST_EXPR_STMT:
-        check_expr_stmt(node, ctx);
+    case AST_BLOCK_STMT:
+        sema_block(scope, stmt);
         break;
 
     default:
-        break;
-    }
-
-    for (ASTNode *c = node->first_child; c; c = c->next_sibling) {
-        check_node(c, ctx);
+        sema_fatal(NULL, "internal error: unexpected stmt node kind");
     }
 }
 
-static void check_function_def(ASTNode *fn, SemanticContext *ctx) {
-    ASTNode *return_type = fn->first_child;
-    ASTNode *name        = return_type->next_sibling;
-    ASTNode *param_list  = name->next_sibling;
-
-    // Check if return type is valid, and store it in ctx
-    if (!symtab_is_type(return_type->data.text.name)) {
-        report_error(return_type->line, return_type->column,
-                     "Unknown return type");
+static void sema_block(Scope *parent_scope, AstNode *block) {
+    if (!block || block->kind != AST_BLOCK_STMT) {
+        sema_fatal(NULL, "internal error: expected BLOCK_STMT");
     }
-    ctx->return_type = return_type;
 
-    symtab_push_scope(); // Create new scope for function
+    Scope *scope       = scope_create(parent_scope);
 
-    // Check parameters and add to scope.
-    for (ASTNode *param = param_list->first_child; param;
-         param          = param->next_sibling) {
-        ASTNode *type = param->first_child;
-        ASTNode *name = type->next_sibling;
-
-        if (!symtab_is_type(type->data.text.name)) {
-            report_error(type->line, type->column, "Unknown parameter type");
-        }
-
-        if (!symtab_add_var(name->data.text.name, type, 0)) {
-            report_error(name->line, name->column, "Duplicate parameter name");
-        }
+    AstNodeList *stmts = &block->as.block_stmt.stmts;
+    for (uint32_t i = 0; i < stmts->count; i++) {
+        sema_stmt(scope, stmts->items[i]);
     }
+
+    scope_destroy(scope);
 }
 
-static void check_decl(ASTNode *decl, SemanticContext *ctx) {
-    ASTNode *type = decl->first_child;
-    ASTNode *name = type->next_sibling;
-    ASTNode *init = name->next_sibling; // Can be NULL
+static void sema_func(AstNode *fn) {
+    AstFuncDecl *func  = &fn->as.func_decl;
 
-    if (!symtab_is_type(type->data.text.name)) {
-        report_error(type->line, type->column, "Unknown variable type");
+    TypeId return_type = TYPEID_VOID;
+    if (func->return_type) {
+        return_type = sema_resolve_type_name(g_global_scope, func->return_type);
     }
 
-    int is_mut = (decl->kind == AST_MUT_DECL);
-    if (!symtab_add_var(name->data.text.name, type, is_mut)) {
-        report_error(name->line, name->column, "Duplicate variable definition");
+    Scope *fn_scope     = scope_create(g_global_scope);
+
+    AstNodeList *params = &func->params;
+    for (uint32_t i = 0; i < params->count; i++) {
+        AstParam *param   = &params->items[i]->as.param;
+        TypeId param_type = sema_resolve_type_name(g_global_scope, param->type);
+        char *name        = token_to_cstr(&param->name);
+        if (!scope_define_var(fn_scope, name, param_type, param->is_mut,
+                              params->items[i])) {
+            free(name);
+            sema_fatal(&param->name, "redefinition of parameter in same scope");
+        }
+        free(name);
     }
 
-    if (init) {
-        ctx->expected_int_lit_type = type;
-        ASTNode *init_ty           = check_expr(init, ctx);
-        ctx->expected_int_lit_type = NULL;
+    sema_block(fn_scope, func->body);
 
-        if (init_ty && !can_widen_integer(type, init_ty) &&
-            !symtab_same_type(init_ty->data.text.name, type->data.text.name)) {
-            report_error(init->line, init->column, "Initializer type mismatch");
+    scope_destroy(fn_scope);
+    (void)return_type;
+}
+
+static void sema_pass2_analyze_functions(AstNode *tu) {
+    AstNodeList *items = &tu->as.translation_unit.items;
+
+    for (uint32_t i = 0; i < items->count; i++) {
+        AstNode *it = items->items[i];
+        if (it->kind == AST_FUNC_DECL) {
+            sema_func(it);
         }
     }
 }
 
-static void check_return(ASTNode *ret, SemanticContext *ctx) {
-    ctx->expected_int_lit_type = ctx->return_type;
-    ASTNode *type              = check_expr(ret->first_child, ctx);
-    ctx->expected_int_lit_type = NULL;
-    if (!can_widen_integer(ctx->return_type, type) &&
-        !symtab_same_type(type->data.text.name,
-                          ctx->return_type->data.text.name)) {
-        report_error(ret->line, ret->column, "Return type mismatch");
-    }
-    ret->type        = promote_integer(ctx->return_type, type);
-    ctx->return_type = NULL;
-}
+void sema_analyze(AstNode *tu) {
+    types_init();
 
-static void check_expr_stmt(ASTNode *expr_stmt, SemanticContext *ctx) {
-    check_expr(expr_stmt->first_child, ctx);
-}
+    g_global_scope = scope_create(NULL);
+    sema_init_builtin_types(g_global_scope);
 
-static void check_assign(ASTNode *assign, SemanticContext *ctx) {
-    ASTNode *ident      = assign->first_child;
-    ASTNode *expr       = ident->next_sibling;
-
-    ASTNode *ident_type = symtab_find_var(ident->data.text.name);
-    if (!ident_type) {
-        report_error(ident->line, ident->column, "Undeclared identifier");
-        return;
-    }
-
-    if (!symtab_is_mut(ident->data.text.name)) {
-        report_error(ident->line, ident->column,
-                     "Attempt to assign to non-mut variable");
-        return;
-    }
-
-    ctx->expected_int_lit_type = ident_type;
-    ASTNode *expr_type         = check_expr(expr, ctx);
-    ctx->expected_int_lit_type = NULL;
-    if (expr_type && !can_widen_integer(ident_type, expr_type) &&
-        !symtab_same_type(expr_type->data.text.name,
-                          ident_type->data.text.name)) {
-        report_error(ident->line, ident->column, "Type mismatch in assignment");
-    }
-}
-
-/* Check expression for semantic errors, returns type of expression */
-static ASTNode *check_expr(ASTNode *expr, SemanticContext *ctx) {
-    switch (expr->first_child->kind) {
-    case AST_ADD_EXPR:
-    case AST_SUB_EXPR: {
-        ASTNode *type = check_add_expr(expr->first_child, ctx);
-        expr->type    = type;
-        return type;
-    }
-    case AST_MUL_EXPR:
-    case AST_DIV_EXPR:
-    case AST_MOD_EXPR: {
-        ASTNode *type = check_mul_expr(expr->first_child, ctx);
-        expr->type    = type;
-        return type;
-    }
-    case AST_NEG_EXPR:
-    case AST_BW_NOT_EXPR: {
-        ASTNode *type = check_unary_expr(expr->first_child, ctx);
-        expr->type    = type;
-        return type;
-    }
-    case AST_SHIFT_RIGHT:
-    case AST_SHIFT_LEFT:
-    case AST_BW_AND_EXPR:
-    case AST_BW_XOR_EXPR:
-    case AST_BW_OR_EXPR: {
-        ASTNode *type = check_bitwise_expr(expr->first_child, ctx);
-        expr->type    = type;
-        return type;
-    }
-    case AST_INT_LITERAL:
-    case AST_IDENTIFIER:
-    case AST_CALL_EXPR:
-    case AST_EXPRESSION: {
-        ASTNode *type = check_primary(expr->first_child, ctx);
-        expr->type    = type;
-        return type;
-    }
-    default:
-        break;
-    }
-
-    return NULL;
-}
-
-static ASTNode *check_add_expr(ASTNode *add_expr, SemanticContext *ctx) {
-    ASTNode *lh      = add_expr->first_child;
-    ASTNode *rh      = lh->next_sibling;
-
-    ASTNode *lh_type = NULL;
-    if (lh->kind >= AST_ADD_EXPR && lh->kind <= AST_SUB_EXPR) {
-        lh_type = check_add_expr(lh, ctx);
-    } else if (lh->kind >= AST_MUL_EXPR && lh->kind <= AST_MOD_EXPR) {
-        lh_type = check_mul_expr(lh, ctx);
-    } else if (lh->kind >= AST_SHIFT_RIGHT && lh->kind <= AST_BW_OR_EXPR) {
-        lh_type = check_bitwise_expr(lh, ctx);
-    } else if (lh->kind >= AST_NEG_EXPR && lh->kind <= AST_BW_NOT_EXPR) {
-        lh_type = check_unary_expr(lh, ctx);
-    } else {
-        lh_type = check_primary(lh, ctx);
-    }
-
-    ASTNode *rh_type = NULL;
-    if (rh->kind >= AST_ADD_EXPR && rh->kind <= AST_SUB_EXPR) {
-        rh_type = check_add_expr(rh, ctx);
-    } else if (rh->kind >= AST_MUL_EXPR && rh->kind <= AST_MOD_EXPR) {
-        rh_type = check_mul_expr(rh, ctx);
-    } else if (rh->kind >= AST_SHIFT_RIGHT && rh->kind <= AST_BW_OR_EXPR) {
-        rh_type = check_bitwise_expr(rh, ctx);
-    } else if (rh->kind >= AST_NEG_EXPR && rh->kind <= AST_BW_NOT_EXPR) {
-        rh_type = check_unary_expr(rh, ctx);
-    } else {
-        rh_type = check_primary(rh, ctx);
-    }
-
-    if (!can_widen_integer(lh_type, rh_type) &&
-        !can_widen_integer(rh_type, lh_type)) {
-        report_error(add_expr->line, add_expr->column,
-                     "Invalid operands in add_expr");
-    }
-
-    if (!is_integer_type(lh_type) || !is_integer_type(rh_type)) {
-        report_error(add_expr->line, add_expr->column,
-                     "Type doesnt support operator");
-    }
-
-    add_expr->type = promote_integer(lh_type, rh_type);
-    return add_expr->type;
-}
-
-static ASTNode *check_mul_expr(ASTNode *mul_expr, SemanticContext *ctx) {
-    ASTNode *lh      = mul_expr->first_child;
-    ASTNode *rh      = lh->next_sibling;
-
-    ASTNode *lh_type = NULL;
-    if (lh->kind >= AST_ADD_EXPR && lh->kind <= AST_SUB_EXPR) {
-        lh_type = check_add_expr(lh, ctx);
-    } else if (lh->kind >= AST_MUL_EXPR && lh->kind <= AST_MOD_EXPR) {
-        lh_type = check_mul_expr(lh, ctx);
-    } else if (lh->kind >= AST_SHIFT_RIGHT && lh->kind <= AST_BW_OR_EXPR) {
-        lh_type = check_bitwise_expr(lh, ctx);
-    } else if (lh->kind >= AST_NEG_EXPR && lh->kind <= AST_BW_NOT_EXPR) {
-        lh_type = check_unary_expr(lh, ctx);
-    } else {
-        lh_type = check_primary(lh, ctx);
-    }
-
-    ASTNode *rh_type = NULL;
-    if (rh->kind >= AST_ADD_EXPR && rh->kind <= AST_SUB_EXPR) {
-        rh_type = check_add_expr(rh, ctx);
-    } else if (rh->kind >= AST_MUL_EXPR && rh->kind <= AST_MOD_EXPR) {
-        rh_type = check_mul_expr(rh, ctx);
-    } else if (rh->kind >= AST_SHIFT_RIGHT && rh->kind <= AST_BW_OR_EXPR) {
-        rh_type = check_bitwise_expr(rh, ctx);
-    } else if (rh->kind >= AST_NEG_EXPR && rh->kind <= AST_BW_NOT_EXPR) {
-        rh_type = check_unary_expr(rh, ctx);
-    } else {
-        rh_type = check_primary(rh, ctx);
-    }
-
-    if (!can_widen_integer(lh_type, rh_type) &&
-        !can_widen_integer(rh_type, lh_type)) {
-        report_error(mul_expr->line, mul_expr->column,
-                     "Invalid operands in mul_expr");
-    }
-
-    if (mul_expr->kind == AST_MOD_EXPR) {
-        if (!is_integer_type(lh_type) || !is_integer_type(rh_type)) {
-            report_error(mul_expr->line, mul_expr->column,
-                         "Modulo only supports integers");
-        }
-    } else {
-        if (!is_integer_type(lh_type) || !is_integer_type(rh_type)) {
-            report_error(mul_expr->line, mul_expr->column,
-                         "Type doesnt support operator");
-        }
-    }
-
-    mul_expr->type = promote_integer(lh_type, rh_type);
-    return mul_expr->type;
-}
-
-static ASTNode *check_bitwise_expr(ASTNode *bitwise_expr,
-                                   SemanticContext *ctx) {
-    ASTNode *lh      = bitwise_expr->first_child;
-    ASTNode *rh      = lh->next_sibling;
-
-    ASTNode *lh_type = NULL;
-    if (lh->kind >= AST_ADD_EXPR && lh->kind <= AST_SUB_EXPR) {
-        lh_type = check_add_expr(lh, ctx);
-    } else if (lh->kind >= AST_MUL_EXPR && lh->kind <= AST_MOD_EXPR) {
-        lh_type = check_mul_expr(lh, ctx);
-    } else if (lh->kind >= AST_SHIFT_RIGHT && lh->kind <= AST_BW_OR_EXPR) {
-        lh_type = check_bitwise_expr(lh, ctx);
-    } else if (lh->kind >= AST_NEG_EXPR && lh->kind <= AST_BW_NOT_EXPR) {
-        lh_type = check_unary_expr(lh, ctx);
-    } else {
-        lh_type = check_primary(lh, ctx);
-    }
-
-    ASTNode *rh_type = NULL;
-    if (rh->kind >= AST_ADD_EXPR && rh->kind <= AST_SUB_EXPR) {
-        rh_type = check_add_expr(rh, ctx);
-    } else if (rh->kind >= AST_MUL_EXPR && rh->kind <= AST_MOD_EXPR) {
-        rh_type = check_mul_expr(rh, ctx);
-    } else if (rh->kind >= AST_SHIFT_RIGHT && rh->kind <= AST_BW_OR_EXPR) {
-        rh_type = check_bitwise_expr(rh, ctx);
-    } else if (rh->kind >= AST_NEG_EXPR && rh->kind <= AST_BW_NOT_EXPR) {
-        rh_type = check_unary_expr(rh, ctx);
-    } else {
-        rh_type = check_primary(rh, ctx);
-    }
-
-    if (!can_widen_integer(lh_type, rh_type) &&
-        !can_widen_integer(rh_type, lh_type)) {
-        report_error(bitwise_expr->line, bitwise_expr->column,
-                     "Invalid operands in bitwise_expr");
-    }
-
-    if (!is_integer_type(lh_type) || !is_integer_type(rh_type)) {
-        report_error(bitwise_expr->line, bitwise_expr->column,
-                     "Type doesnt support operator");
-    }
-
-    if (bitwise_expr->kind == AST_SHIFT_RIGHT ||
-        bitwise_expr->kind == AST_SHIFT_LEFT) {
-        if (rh->kind == AST_INT_LITERAL) {
-            size_t size   = 0;
-            ASTNode *type = promote_integer(lh_type, rh_type);
-            if (symtab_same_type(type->data.text.name, "u8") ||
-                symtab_same_type(type->data.text.name, "i8")) {
-                size = 8;
-            } else if (symtab_same_type(type->data.text.name, "u16") ||
-                       symtab_same_type(type->data.text.name, "i16")) {
-                size = 16;
-            } else if (symtab_same_type(type->data.text.name, "u32") ||
-                       symtab_same_type(type->data.text.name, "i32")) {
-                size = 32;
-            } else if (symtab_same_type(type->data.text.name, "u64") ||
-                       symtab_same_type(type->data.text.name, "i64")) {
-                size = 64;
-            }
-
-            if (rh->data.int_lit.u_val == 0) {
-                if (!(rh->data.int_lit.i_val >= 0 &&
-                      rh->data.int_lit.i_val < size)) {
-                    report_error(rh->line, rh->column,
-                                 "Value too large for shift");
-                }
-            } else {
-                if (!(rh->data.int_lit.u_val >= 0 &&
-                      rh->data.int_lit.u_val < size)) {
-                    report_error(rh->line, rh->column,
-                                 "Value too large for shift");
-                }
-            }
-        }
-    }
-
-    bitwise_expr->type = promote_integer(lh_type, rh_type);
-    return bitwise_expr->type;
-}
-
-static ASTNode *check_unary_expr(ASTNode *unary_expr, SemanticContext *ctx) {
-    ASTNode *rh      = unary_expr->first_child;
-
-    ASTNode *rh_type = NULL;
-    if (rh->kind >= AST_ADD_EXPR && rh->kind <= AST_SUB_EXPR) {
-        rh_type = check_add_expr(rh, ctx);
-    } else if (rh->kind >= AST_MUL_EXPR && rh->kind <= AST_MOD_EXPR) {
-        rh_type = check_mul_expr(rh, ctx);
-    } else if (rh->kind >= AST_SHIFT_RIGHT && rh->kind <= AST_BW_OR_EXPR) {
-        rh_type = check_bitwise_expr(rh, ctx);
-    } else if (rh->kind >= AST_NEG_EXPR && rh->kind <= AST_BW_NOT_EXPR) {
-        rh_type = check_unary_expr(rh, ctx);
-    } else {
-        rh_type = check_primary(rh, ctx);
-    }
-
-    if (!is_integer_type(rh_type)) {
-        report_error(unary_expr->line, unary_expr->column,
-                     "Type doesnt support operator");
-    }
-
-    unary_expr->type = rh_type;
-    return unary_expr->type;
-}
-
-static ASTNode *check_primary(ASTNode *primary, SemanticContext *ctx) {
-    switch (primary->kind) {
-    case AST_INT_LITERAL:
-        if (primary->data.int_lit.type) {
-            return primary->data.int_lit.type;
-        }
-
-        if (ctx->expected_int_lit_type) {
-            if (symtab_same_type(ctx->expected_int_lit_type->data.text.name,
-                                 "u8") &&
-                (primary->data.int_lit.i_val > UINT8_MAX ||
-                 primary->data.int_lit.i_val < 0)) {
-                report_error(primary->line, primary->column,
-                             "Number invalid for u8 var");
-            } else if (symtab_same_type(
-                           ctx->expected_int_lit_type->data.text.name, "u16") &&
-                       (primary->data.int_lit.i_val > UINT16_MAX ||
-                        primary->data.int_lit.i_val < 0)) {
-                report_error(primary->line, primary->column,
-                             "Number invalid for u16 var");
-            } else if (symtab_same_type(
-                           ctx->expected_int_lit_type->data.text.name, "u32") &&
-                       (primary->data.int_lit.i_val > UINT32_MAX ||
-                        primary->data.int_lit.i_val < 0)) {
-                report_error(primary->line, primary->column,
-                             "Number invalid for u32 var");
-            } else if (symtab_same_type(
-                           ctx->expected_int_lit_type->data.text.name, "u64") &&
-                       (primary->data.int_lit.i_val > UINT64_MAX ||
-                        primary->data.int_lit.i_val < 0)) {
-                report_error(primary->line, primary->column,
-                             "Number invalid for u64 var");
-            } else if (symtab_same_type(
-                           ctx->expected_int_lit_type->data.text.name, "i8") &&
-                       (primary->data.int_lit.i_val > INT8_MAX ||
-                        primary->data.int_lit.i_val < INT8_MIN)) {
-                report_error(primary->line, primary->column,
-                             "Number invalid for i8 var");
-            } else if (symtab_same_type(
-                           ctx->expected_int_lit_type->data.text.name, "i16") &&
-                       (primary->data.int_lit.i_val > INT16_MAX ||
-                        primary->data.int_lit.i_val < INT16_MIN)) {
-                report_error(primary->line, primary->column,
-                             "Number invalid for i16 var");
-            } else if (symtab_same_type(
-                           ctx->expected_int_lit_type->data.text.name, "i32") &&
-                       (primary->data.int_lit.i_val > INT32_MAX ||
-                        primary->data.int_lit.i_val < INT32_MIN)) {
-                report_error(primary->line, primary->column,
-                             "Number invalid for i32 var");
-            } else if (symtab_same_type(
-                           ctx->expected_int_lit_type->data.text.name, "i64") &&
-                       (primary->data.int_lit.i_val > INT64_MAX ||
-                        primary->data.int_lit.i_val < INT64_MIN)) {
-                report_error(primary->line, primary->column,
-                             "Number invalid for i64 var");
-            }
-
-            primary->data.int_lit.type = ctx->expected_int_lit_type;
-            return primary->data.int_lit.type;
-        } else {
-            const char *type_name = "";
-            if (primary->data.int_lit.i_val <= INT32_MAX &&
-                primary->data.int_lit.i_val >= INT32_MIN) {
-                type_name = "i32";
-            } else if (primary->data.int_lit.i_val <= INT64_MAX &&
-                       primary->data.int_lit.i_val >= INT64_MIN) {
-                type_name = "i64";
-            } else {
-                report_error(primary->line, primary->column,
-                             "Number too large for i64");
-            }
-
-            Token ty_tok;
-            ty_tok.line   = primary->line;
-            ty_tok.column = primary->column;
-            ty_tok.type   = TOKEN_IDENTIFIER;
-            ty_tok.length = str_len(type_name);
-            if (ty_tok.length > MAX_LEXEME)
-                ty_tok.length = MAX_LEXEME;
-
-            for (int i = 0; i < ty_tok.length; i++) {
-                ty_tok.lexeme[i] = type_name[i];
-            }
-            ty_tok.lexeme[ty_tok.length] = '\0';
-            primary->data.int_lit.type   = ast_make_type_name(ty_tok);
-        }
-
-        return primary->data.int_lit.type;
-
-    case AST_IDENTIFIER: {
-        ASTNode *ty = symtab_find_var(primary->data.text.name);
-        if (!ty) {
-            report_error(primary->line, primary->column,
-                         "Use of undeclared variable");
-            return NULL;
-        }
-        return ty;
-    }
-    case AST_CALL_EXPR: {
-        ASTNode *type = check_call_expr(primary, ctx);
-        primary->type = type;
-        return type;
-    }
-
-    case AST_EXPRESSION: {
-        ASTNode *type = check_expr(primary, ctx);
-        primary->type = type;
-        return type;
-    }
-
-    default:
-        break;
-    }
-    return NULL;
-}
-
-static ASTNode *check_call_expr(ASTNode *call_expr, SemanticContext *ctx) {
-    ASTNode *ident    = call_expr->first_child;
-    ASTNode *arg_list = ident->next_sibling;
-
-    ASTNode *fn       = symtab_find_function(ident->data.text.name);
-
-    if (!fn) {
-        report_error(ident->line, ident->column, "Call to undefined function");
-        return NULL;
-    }
-
-    ASTNode *fn_arg_list = fn->first_child->next_sibling->next_sibling;
-    int fn_arg_count     = 0;
-    for (ASTNode *arg = fn_arg_list->first_child; arg;
-         arg          = arg->next_sibling) {
-        fn_arg_count++;
-    }
-
-    int arg_count = 0;
-    for (ASTNode *arg = arg_list->first_child; arg; arg = arg->next_sibling) {
-        arg_count++;
-    }
-
-    if (fn_arg_count != arg_count) {
-        report_error(arg_list->line, arg_list->column,
-                     "Argument count mismatch");
-    }
-
-    ASTNode *arg    = arg_list->first_child;
-    ASTNode *fn_arg = fn_arg_list->first_child;
-    for (int i = 0; i < fn_arg_count; i++) {
-        ASTNode *fn_arg_type       = fn_arg->first_child;
-        ctx->expected_int_lit_type = fn_arg_type;
-        ASTNode *arg_type          = check_expr(arg, ctx);
-        ctx->expected_int_lit_type = NULL;
-        if (!can_widen_integer(fn_arg_type, arg_type) &&
-            !symtab_same_type(arg_type->data.text.name,
-                              fn_arg_type->data.text.name)) {
-            report_error(arg->line, arg->column,
-                         "Argument type mismatch in function call");
-        }
-
-        arg    = arg->next_sibling;
-        fn_arg = fn_arg->next_sibling;
-    }
-
-    call_expr->type = fn->first_child;
-    return fn->first_child;
+    sema_pass1_collect_globals(tu, g_global_scope);
+    sema_pass2_analyze_functions(tu);
+    // TODO: Add pass 3
 }

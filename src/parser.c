@@ -1,442 +1,595 @@
 #include "parser.h"
+#include <stdlib.h>
 
-#include "AST/ast.c"
-#include "AST/ast_arena.c"
-#include "AST/ast_builder.c"
-#include "AST/ast_log.c"
-#include "file_stream.c"
-#include "lexer.c"
-#include "symtab.c"
-#include "tokens.c"
-
-/* <program> ::= { <function_def> } */
-ASTNode *parse_program(void) {
-    ast_arena_reset();
-    symtab_init();
-    ASTNode *root = ast_make_program();
-    while (peek_token().type != TOKEN_EOF) {
-        ASTNode *fn = parse_function_def();
-        ast_add_child(root, fn);
+static void advance(Parser *p) {
+    if (p->has_peek) {
+        p->cur      = p->peek;
+        p->has_peek = 0;
+    } else {
+        p->cur = lexer_next(p->lx);
     }
+}
+
+static Token peek(Parser *p) {
+    if (!p->has_peek) {
+        p->peek     = lexer_next(p->lx);
+        p->has_peek = 1;
+    }
+    return p->peek;
+}
+
+static int match(Parser *p, TokenKind kind) {
+    if (p->cur.kind == kind) {
+        advance(p);
+        return 1;
+    }
+    return 0;
+}
+
+static Token expect(Parser *p, TokenKind kind, const char *msg) {
+    if (p->cur.kind != kind) {
+        // TODO: Hook into diagnostic system
+        fprintf(stderr, "parse error at %u:%u: expected %s, got %s : %s\n",
+                p->cur.line, p->cur.column, token_kind_name(kind),
+                token_kind_name(p->cur.kind), msg);
+        exit(1);
+    }
+    Token t = p->cur;
+    advance(p);
+    return t;
+}
+
+void parser_init(Parser *p, Lexer *lx) {
+    p->lx       = lx;
+    p->has_peek = 0;
+    p->cur      = lexer_next(lx);
+}
+
+static AstNode *new_node(AstNodeKind kind) {
+    AstNode *n = malloc(sizeof *n); // later: arena
+    n->kind    = kind;
+    return n;
+}
+
+static AstNode *make_ident_node(Token name) {
+    AstNode *n            = new_node(AST_IDENT_EXPR);
+    n->as.ident_expr.name = name;
+    return n;
+}
+
+static AstNode *make_literal_node(Token tok) {
+    AstNode *n             = new_node(AST_LITERAL_EXPR);
+    n->as.literal_expr.tok = tok;
+    return n;
+}
+
+static AstNode *parse_type_spec(Parser *p) {
+    Token name = expect(p, TOK_IDENT, "expected type name");
+    return make_ident_node(name);
+}
+
+// Forward declarations
+static AstNode *parse_block(Parser *p);
+static AstNode *parse_func_decl(Parser *p);
+static AstNode *parse_struct_decl(Parser *p);
+static AstNode *parse_stmt(Parser *p);
+static AstNode *parse_expr(Parser *p);
+
+AstNode *parse_translation_unit(Parser *p) {
+    AstNode *root = new_node(AST_TRANSLATION_UNIT);
+    ast_list_init(&root->as.translation_unit.items);
+
+    while (p->cur.kind != TOK_EOF) {
+        AstNode *item = NULL;
+
+        // TODO: Allow top-level varaible declarations
+        if (p->cur.kind == TOK_KW_FUN) {
+            item = parse_func_decl(p);
+        } else if (p->cur.kind == TOK_KW_STRUCT) {
+            item = parse_struct_decl(p);
+        } else {
+            // TODO: Hook into diagnostic system
+            fprintf(
+                stderr,
+                "parse error at %u:%u: unexpected token at top level: '%.*s'\n",
+                p->cur.line, p->cur.column, (int)p->cur.length, p->cur.lexeme);
+            abort();
+        }
+        ast_list_push(&root->as.translation_unit.items, item);
+    }
+
     return root;
 }
 
-/* <function_def> ::= <type> <identifier> ( <param_list> ) <block> */
-ASTNode *parse_function_def(void) {
-    Token tk_ret    = expect(TOKEN_IDENTIFIER);
-    ASTNode *ret_ty = ast_make_type_name(tk_ret);
-
-    Token tk_name   = expect(TOKEN_IDENTIFIER);
-    ASTNode *name   = ast_make_identifier(tk_name);
-
-    expect(TOKEN_LPAREN); // Starting left parentheses
-    ASTNode *params = ast_make_param_list(tk_name.line, tk_name.column);
-    if (!accept(TOKEN_RPAREN)) { // If no right parantheses immedietly after,
-                                 // must be a param list
-        do {
-            // each <param> ::= <type> <ident>
-            Token p_ty_tok = expect(TOKEN_IDENTIFIER);
-            ASTNode *p_ty  = ast_make_type_name(p_ty_tok);
-
-            Token p_nm_tok = expect(TOKEN_IDENTIFIER);
-            ASTNode *p_nm  = ast_make_identifier(p_nm_tok);
-
-            ast_add_child(params, ast_make_param(p_ty, p_nm));
-        } while (
-            accept(TOKEN_COMMA)); // While there are params seperated by commas
-        expect(TOKEN_RPAREN); // Ending parentheses
+// ----- Function parsing -----
+static AstNode *parse_param(Parser *p) {
+    bool is_mut = false;
+    if (p->cur.kind == TOK_KW_MUT) {
+        is_mut = true;
+        advance(p);
     }
 
-    ASTNode *body = parse_block(); // Following body of the function
-    ASTNode *func = ast_make_function_def(ret_ty, name, params, body);
-    symtab_add_function(func);
-    return func;
+    AstNode *ty = parse_type_spec(p);
+    Token name  = expect(p, TOK_IDENT, "expected parameter name");
+
+    // Create new param node
+    AstNode *param         = new_node(AST_PARAM);
+    param->as.param.type   = ty;
+    param->as.param.is_mut = is_mut;
+    param->as.param.name   = name;
+    return param;
 }
 
-/* <block> ::= "{" { <statement> | <block> } "}" */
-ASTNode *parse_block(void) {
-    Token tk       = expect(TOKEN_LBRACE);
-    ASTNode *block = ast_make_block(tk.line, tk.column);
+static AstNode *parse_params(Parser *p, AstNode *fn) {
+    expect(p, TOK_LPAREN, "expected '(' after function name");
+    ast_list_init(&fn->as.func_decl.params);
 
-    // Keep parsing statements until right brace
-    while (!accept(TOKEN_RBRACE)) {
-        if (peek_token().type == TOKEN_LBRACE) {
-            ast_add_child(block, parse_block());
-        } else {
-            ast_add_child(block, parse_statement());
+    if (p->cur.kind != TOK_RPAREN) {
+        for (;;) {
+            AstNode *param = parse_param(p);
+            ast_list_push(&fn->as.func_decl.params, param);
+            if (!match(p, TOK_COMMA))
+                break;
         }
     }
 
+    expect(p, TOK_RPAREN, "expected ')' after parameters");
+    return fn;
+}
+
+static AstNode *parse_func_decl(Parser *p) {
+    expect(p, TOK_KW_FUN, "expected 'fun' keyword");
+
+    Token name = expect(p, TOK_IDENT, "expected function name");
+
+    // Create new function node
+    AstNode *fn                  = new_node(AST_FUNC_DECL);
+    fn->as.func_decl.name        = name;
+    fn->as.func_decl.return_type = NULL;
+    fn->as.func_decl.body        = NULL;
+    ast_list_init(&fn->as.func_decl.params);
+
+    parse_params(p, fn);
+
+    // TODO: Allow implicit void return type
+    fn->as.func_decl.return_type = parse_type_spec(p);
+    fn->as.func_decl.body        = parse_block(p);
+
+    return fn;
+}
+
+// ----- Struct parsing -----
+static AstNode *parse_field(Parser *p) {
+    Token name = expect(p, TOK_IDENT, "expected field name");
+    expect(p, TOK_COLON, "expected ':' after field name");
+
+    AstNode *ty          = parse_type_spec(p);
+    AstNode *field       = new_node(AST_FIELD);
+    field->as.field.name = name;
+    field->as.field.type = ty;
+    return field;
+}
+
+static AstNode *parse_struct_decl(Parser *p) {
+    expect(p, TOK_KW_STRUCT, "expected 'struct' keyword");
+    Token name = expect(p, TOK_IDENT, "expected struct name");
+    expect(p, TOK_LBRACE, "expected '{' after struct name");
+
+    AstNode *struct_decl             = new_node(AST_STRUCT_DECL);
+    struct_decl->as.struct_decl.name = name;
+    ast_list_init(&struct_decl->as.struct_decl.fields);
+
+    if (p->cur.kind != TOK_RBRACE) {
+        for (;;) {
+            AstNode *field = parse_field(p);
+            ast_list_push(&struct_decl->as.struct_decl.fields, field);
+
+            if (!match(p, TOK_COMMA))
+                break;
+
+            // Allow trailing comma
+            if (p->cur.kind == TOK_RBRACE)
+                break;
+        }
+    }
+
+    expect(p, TOK_RBRACE, "expected '}' after struct body");
+    return struct_decl;
+}
+
+// ----- Block + Statement parsing -----
+static AstNode *parse_block(Parser *p) {
+    expect(p, TOK_LBRACE, "expected '{'");
+
+    AstNode *block = new_node(AST_BLOCK_STMT);
+    ast_list_init(&block->as.block_stmt.stmts);
+
+    while (p->cur.kind != TOK_RBRACE && p->cur.kind != TOK_EOF) {
+        AstNode *stmt = parse_stmt(p);
+        ast_list_push(&block->as.block_stmt.stmts, stmt);
+    }
+
+    expect(p, TOK_RBRACE, "expected '}'");
     return block;
 }
 
-/* <statement> ::= const_decl ";" | mut_decl ";" | return_stmt ";" | expr_stmt
- * ";" | <assign_stmt> ";" */
-ASTNode *parse_statement(void) {
-    // <const_decl> ::= <type> <identifier> = <expression>
-    // We check until equals sign to differentiate from <expression>
-    if (peek_nth(1).type == TOKEN_IDENTIFIER &&
-        peek_nth(2).type == TOKEN_IDENTIFIER &&
-        peek_nth(3).type == TOKEN_EQUALS) {
-        ASTNode *const_decl = parse_const_decl();
-        expect(TOKEN_SEMI);
-        return const_decl;
+static int starts_var_decl(Parser *p) {
+    // we check for MUT or IDENT IDENT
+    if (p->cur.kind == TOK_KW_MUT)
+        return 1;
+
+    if (p->cur.kind != TOK_IDENT)
+        return 0;
+
+    Token next = peek(p);
+
+    if (next.kind == TOK_IDENT) {
+        return 1;
     }
 
-    if (peek_nth(1).type == TOKEN_IDENTIFIER &&
-        peek_nth(2).type == TOKEN_EQUALS) {
-        ASTNode *assign_stmt = parse_assign_stmt();
-        expect(TOKEN_SEMI);
-        return assign_stmt;
-    }
-
-    // <mut_decl> ::= mut <type> <identifier> = <expression>
-    if (peek_token().type == TOKEN_MUT) {
-        ASTNode *mut_decl = parse_mut_decl();
-        expect(TOKEN_SEMI);
-        return mut_decl;
-    }
-
-    // <return_stmt> ::= return <expression>
-    if (peek_token().type == TOKEN_RETURN) {
-        ASTNode *return_stmt = parse_return_stmt();
-        expect(TOKEN_SEMI);
-        return return_stmt;
-    }
-
-    // Else parse expression
-    ASTNode *expr_stmt = parse_expr_stmt();
-    expect(TOKEN_SEMI);
-    return expr_stmt;
+    return 0;
 }
 
-/* <const_decl> ::= <type> <ident> "=" <expression> */
-ASTNode *parse_const_decl(void) {
-    Token tk_type = expect(TOKEN_IDENTIFIER);
-    ASTNode *type = ast_make_type_name(tk_type);
-
-    Token tk_name = expect(TOKEN_IDENTIFIER);
-    ASTNode *name = ast_make_identifier(tk_name);
-
-    expect(TOKEN_EQUALS);
-
-    ASTNode *init = parse_expression();
-
-    ASTNode *const_decl =
-        ast_make_const_decl(type, name, init, type->line, type->column);
-    return const_decl;
-}
-
-/* <mut_decl> ::= mut <type> <identifier> = <expression> */
-ASTNode *parse_mut_decl(void) {
-    expect(TOKEN_MUT);
-
-    Token tk_type = expect(TOKEN_IDENTIFIER);
-    ASTNode *type = ast_make_type_name(tk_type);
-
-    Token tk_name = expect(TOKEN_IDENTIFIER);
-    ASTNode *name = ast_make_identifier(tk_name);
-
-    ASTNode *init = NULL;
-    if (accept(TOKEN_EQUALS)) {
-        init = parse_expression();
-    }
-    ASTNode *mut_decl =
-        ast_make_mut_decl(type, name, init, type->line, type->column);
-    return mut_decl;
-}
-
-/* <return_stmt> ::= return <expression> */
-ASTNode *parse_return_stmt(void) {
-    Token tk_ret  = expect(TOKEN_RETURN); // Used for line and column
-    ASTNode *expr = parse_expression();
-    return ast_make_return_stmt(expr, tk_ret.line, tk_ret.column);
-}
-
-/* <expr_stmt> ::= <expression> */
-ASTNode *parse_expr_stmt(void) {
-    ASTNode *expr = parse_expression();
-    return ast_make_expr_stmt(expr, expr->line, expr->column);
-}
-
-/* <assign_stmt> ::= <identifier> = <expression> */
-ASTNode *parse_assign_stmt(void) {
-    Token id = next_token();
-    expect(TOKEN_EQUALS);
-    ASTNode *rhs = parse_expression();
-
-    ASTNode *assign_stmt =
-        ast_make_assign(ast_make_identifier(id), rhs, id.line, id.column);
-    return assign_stmt;
-}
-
-/* <expression> ::= <logical_or_expr> */
-ASTNode *parse_expression(void) {
-    // TODO: Switch to logical or expr
-    ASTNode *logical_or_expr = parse_bitwise_or_expr();
-    ASTNode *expr =
-        ast_make_expression(logical_or_expr->line, logical_or_expr->column);
-    ast_add_child(expr, logical_or_expr);
-    return expr;
-}
-
-/* <logical_or_expr> ::= <logical_and_expr> { || | or <logical_and_expr> } ; */
-ASTNode *parse_logical_or_expr(void) {
-    ASTNode *lhs = parse_logical_and_expr();
-    while (accept(TOKEN_PIPE)) {
-        ASTNode *rhs = parse_logical_and_expr();
-        lhs          = ast_make_or_expr(lhs, rhs, lhs->line, lhs->column);
-    }
-    return lhs;
-}
-
-/* <logical_and_expr> ::= <bitwise_or_expr> { && | and <bitwise_or_expr> } ; */
-ASTNode *parse_logical_and_expr(void) {
-    ASTNode *lhs = parse_bitwise_or_expr();
-    while (accept(TOKEN_AMPERSAND)) {
-        ASTNode *rhs = parse_bitwise_or_expr();
-        lhs          = ast_make_and_expr(lhs, rhs, lhs->line, lhs->column);
-    }
-    return lhs;
-}
-
-/* <bitwise_or_expr> ::= <bitwise_xor_expr> { | <bitwise_xor_expr> } ; */
-ASTNode *parse_bitwise_or_expr(void) {
-    ASTNode *lhs = parse_bitwise_xor_expr();
-    while (accept(TOKEN_PIPE)) {
-        ASTNode *rhs = parse_bitwise_xor_expr();
-        lhs          = ast_make_or_expr(lhs, rhs, lhs->line, lhs->column);
-    }
-    return lhs;
-}
-
-/* <bitwise_xor_expr> ::= <bitwise_and_expr> { ^ <bitwise_and_expr> } ; */
-ASTNode *parse_bitwise_xor_expr(void) {
-    ASTNode *lhs = parse_bitwise_and_expr();
-    while (accept(TOKEN_XOR)) {
-        ASTNode *rhs = parse_bitwise_and_expr();
-        lhs          = ast_make_xor_expr(lhs, rhs, lhs->line, lhs->column);
-    }
-    return lhs;
-}
-
-/* <bitwise_and_expr> ::= <equality_expr> { & <equality_expr> } ; */
-ASTNode *parse_bitwise_and_expr(void) {
-    ASTNode *lhs = parse_equality_expr();
-    while (accept(TOKEN_AMPERSAND)) {
-        ASTNode *rhs = parse_equality_expr();
-        lhs          = ast_make_and_expr(lhs, rhs, lhs->line, lhs->column);
-    }
-    return lhs;
-}
-
-/* <equality_expr> ::= <relational_expr> { == | != <relational_expr> } ; */
-ASTNode *parse_equality_expr(void) {
-    ASTNode *lhs = parse_relational_expr();
-    while (peek_token().type == TOKEN_LOGICAL_EQUALS ||
-           peek_token().type == TOKEN_LOGICAL_NOT_EQUALS) {
-        if (accept(TOKEN_LOGICAL_EQUALS)) {
-            ASTNode *rhs = parse_relational_expr();
-            lhs =
-                ast_make_logical_equals_expr(lhs, rhs, lhs->line, lhs->column);
-        } else if (accept(TOKEN_LOGICAL_NOT_EQUALS)) {
-            ASTNode *rhs = parse_relational_expr();
-            lhs          = ast_make_logical_not_equals_expr(lhs, rhs, lhs->line,
-                                                            lhs->column);
+static AstNode *parse_stmt(Parser *p) {
+    if (p->cur.kind == TOK_KW_RETURN) {
+        advance(p);
+        AstNode *ret = new_node(AST_RETURN_STMT);
+        if (p->cur.kind != TOK_SEMI) {
+            ret->as.return_stmt.expr = parse_expr(p);
         } else {
-            write(STDOUT_FILENO, "ERROR PARSING EQUALITY_EXPR\n", 30);
-            return NULL;
+            ret->as.return_stmt.expr = NULL;
         }
+        expect(p, TOK_SEMI, "expected ';' after return statement");
+        return ret;
     }
-    return lhs;
+
+    if (p->cur.kind == TOK_LBRACE) {
+        return parse_block(p);
+    }
+
+    if (starts_var_decl(p)) {
+        bool is_mut = false;
+        if (p->cur.kind == TOK_KW_MUT) {
+            is_mut = true;
+            advance(p);
+        }
+
+        AstNode *type = parse_type_spec(p);
+        Token name    = expect(p, TOK_IDENT, "expected variable name");
+
+        AstNode *init = NULL;
+        if (p->cur.kind == TOK_EQ) {
+            advance(p);
+            init = parse_expr(p);
+        }
+
+        expect(p, TOK_SEMI, "expected ';' after variable declaration");
+
+        AstNode *var_decl            = new_node(AST_VAR_DECL);
+        var_decl->as.var_decl.name   = name;
+        var_decl->as.var_decl.type   = type;
+        var_decl->as.var_decl.is_mut = is_mut;
+        var_decl->as.var_decl.init   = init;
+        return var_decl;
+    }
+
+    // TODO: Add if, else, while, for, etc.
+
+    AstNode *expr = parse_expr(p);
+    expect(p, TOK_SEMI, "expected ';' after expression");
+    AstNode *stmt           = new_node(AST_EXPR_STMT);
+    stmt->as.expr_stmt.expr = expr;
+    return stmt;
 }
 
-/* <relational_expr> ::= <shift_expr> { < | > | <= | >= <shift_expr> } ; */
-ASTNode *parse_relational_expr(void) {
-    ASTNode *lhs = parse_shift_expr();
-    while (peek_token().type == TOKEN_LOGICAL_LESS ||
-           peek_token().type == TOKEN_LOGICAL_GREATER ||
-           peek_token().type == TOKEN_LOGICAL_LESS_EQUALS ||
-           peek_token().type == TOKEN_LOGICAL_GREATER_EQUALS) {
-        if (accept(TOKEN_LOGICAL_LESS)) {
-            ASTNode *rhs = parse_shift_expr();
-            lhs = ast_make_logical_less_expr(lhs, rhs, lhs->line, lhs->column);
-        } else if (accept(TOKEN_LOGICAL_GREATER)) {
-            ASTNode *rhs = parse_shift_expr();
-            lhs =
-                ast_make_logical_greater_expr(lhs, rhs, lhs->line, lhs->column);
-        } else if (accept(TOKEN_LOGICAL_LESS_EQUALS)) {
-            ASTNode *rhs = parse_shift_expr();
-            lhs = ast_make_logical_less_equals_expr(lhs, rhs, lhs->line,
-                                                    lhs->column);
-        } else if (accept(TOKEN_LOGICAL_GREATER_EQUALS)) {
-            ASTNode *rhs = parse_shift_expr();
-            lhs = ast_make_logical_greater_equals_expr(lhs, rhs, lhs->line,
-                                                       lhs->column);
-        } else {
-            write(STDOUT_FILENO, "ERROR PARSING RELATIONAL_EXPR\n", 30);
-            return NULL;
-        }
+// ----- Expression parsing -----
+// ----- Unary expressions -----
+static AstNode *parse_primary(Parser *p) {
+    if (p->cur.kind == TOK_IDENT) {
+        Token name = p->cur;
+        advance(p);
+        return make_ident_node(name);
     }
-    return lhs;
+
+    if (p->cur.kind == TOK_INT_LITERAL || p->cur.kind == TOK_FLOAT_LITERAL ||
+        p->cur.kind == TOK_STRING_LITERAL || p->cur.kind == TOK_CHAR_LITERAL) {
+        Token lit = p->cur;
+        advance(p);
+        return make_literal_node(lit);
+    }
+
+    if (match(p, TOK_LPAREN)) {
+        AstNode *inner = parse_expr(p);
+        expect(p, TOK_RPAREN, "expected ')' after expression");
+        return inner;
+    }
+
+    // TODO: Hook into diagnostic system
+    fprintf(stderr,
+            "parse error at %u:%u: unexpected token in primary expression: "
+            "'%.*s'\n",
+            p->cur.line, p->cur.column, (int)p->cur.length, p->cur.lexeme);
+    abort();
 }
 
-/* <shift_expr> ::= <add_expr> { << | >> } <add_expr> */
-ASTNode *parse_shift_expr(void) {
-    ASTNode *lhs = parse_add_expr();
-    while (peek_token().type == TOKEN_SHIFT_LEFT ||
-           peek_token().type == TOKEN_SHIFT_RIGHT) {
-        if (accept(TOKEN_SHIFT_LEFT)) {
-            ASTNode *rhs = parse_add_expr();
-            lhs = ast_make_shift_left(lhs, rhs, lhs->line, lhs->column);
-        } else if (accept(TOKEN_SHIFT_RIGHT)) {
-            ASTNode *rhs = parse_add_expr();
-            lhs = ast_make_shift_right(lhs, rhs, lhs->line, lhs->column);
-        } else {
-            write(STDOUT_FILENO, "ERROR PARSING SHIFT_EXPR\n", 24);
-            return NULL;
+static AstNode *parse_postfix(Parser *p) {
+    AstNode *expr = parse_primary(p);
+
+    for (;;) {
+        if (p->cur.kind == TOK_LPAREN) {
+            // Function call
+            advance(p);
+
+            AstNode *call             = new_node(AST_CALL_EXPR);
+            call->as.call_expr.callee = expr;
+            ast_list_init(&call->as.call_expr.args);
+
+            if (p->cur.kind != TOK_RPAREN) {
+                for (;;) {
+                    AstNode *arg = parse_expr(p);
+                    ast_list_push(&call->as.call_expr.args, arg);
+                    if (!match(p, TOK_COMMA))
+                        break;
+                }
+            }
+
+            expect(p, TOK_RPAREN, "expected ')' after function call");
+            expr = call;
+            continue;
         }
-    }
 
-    return lhs;
-}
+        if (p->cur.kind == TOK_DOT) {
+            // Member access
+            advance(p);
+            Token field     = expect(p, TOK_IDENT, "expected member name");
 
-/* <add_expr> ::= <mul_expr> { ( + | - ) <mul_expr> } ; */
-ASTNode *parse_add_expr(void) {
-    ASTNode *lhs = parse_mul_expr();
-    while (peek_token().type == TOKEN_PLUS ||
-           peek_token().type == TOKEN_MINUS) {
-        if (accept(TOKEN_PLUS)) {
-            ASTNode *rhs = parse_mul_expr();
-            lhs          = ast_make_add_expr(lhs, rhs, lhs->line, lhs->column);
-        } else if (accept(TOKEN_MINUS)) {
-            ASTNode *rhs = parse_mul_expr();
-            lhs          = ast_make_sub_expr(lhs, rhs, lhs->line, lhs->column);
-        } else {
-            write(STDOUT_FILENO, "ERROR PARSING ADD_EXPR\n", 23);
-            return NULL;
+            AstNode *member = new_node(AST_MEMBER_EXPR);
+            member->as.member_expr.base  = expr;
+            member->as.member_expr.field = field;
+            expr                         = member;
+            continue;
         }
-    }
 
-    return lhs;
-}
-
-/* <mul_expr> ::= <unary_expr> { * | / | % <unary_expr> } ; */
-ASTNode *parse_mul_expr(void) {
-    ASTNode *lhs = parse_unary_expr();
-    while (peek_token().type == TOKEN_STAR ||
-           peek_token().type == TOKEN_SLASH ||
-           peek_token().type == TOKEN_PERCENT) {
-        if (accept(TOKEN_STAR)) {
-            ASTNode *rhs = parse_unary_expr();
-            lhs          = ast_make_mul_expr(lhs, rhs, lhs->line, lhs->column);
-        } else if (accept(TOKEN_SLASH)) {
-            ASTNode *rhs = parse_unary_expr();
-            lhs          = ast_make_div_expr(lhs, rhs, lhs->line, lhs->column);
-        } else if (accept(TOKEN_PERCENT)) {
-            ASTNode *rhs = parse_unary_expr();
-            lhs          = ast_make_mod_expr(lhs, rhs, lhs->line, lhs->column);
-        } else {
-            write(STDOUT_FILENO, "ERROR PARSING MUL_EXPR\n", 23);
-            return NULL;
-        }
-    }
-
-    return lhs;
-}
-
-/* <unary_expr>    ::= { - | ~ } <primary> */
-ASTNode *parse_unary_expr(void) {
-    ASTNode *expr = NULL;
-    if (peek_token().type == TOKEN_MINUS &&
-        peek_nth(2).type >= TOKEN_I8_LITERAL &&
-        peek_nth(2).type <= TOKEN_U64_LITERAL) {
-        expr = parse_primary();
-    } else if (accept(TOKEN_MINUS)) {
-        ASTNode *rhs = parse_primary();
-        expr         = ast_make_neg_expr(rhs, rhs->line, rhs->column);
-    } else if (accept(TOKEN_NOT)) {
-        ASTNode *rhs = parse_primary();
-        expr         = ast_make_not_expr(rhs, rhs->line, rhs->column);
-    } else {
-        expr = parse_primary();
-    }
-
-    return expr;
-}
-
-/* <primary> ::= int_lit | "-" int_lit | ident | call_expr | "(" expr
- * ")" */
-ASTNode *parse_primary(void) {
-    Token tk = peek_token();
-
-    if (tk.type >= TOKEN_I8_LITERAL && tk.type <= TOKEN_U64_LITERAL) {
-        next_token();
-        return ast_make_int_literal(tk);
-    }
-
-    if (tk.type == TOKEN_MINUS) {
-        if (peek_nth(2).type >= TOKEN_I8_LITERAL &&
-            peek_nth(2).type <= TOKEN_U64_LITERAL) {
-            next_token();
-            Token next = next_token();
-            next.data.literal.i *= -1;
-            return ast_make_int_literal(next);
-        } else {
-            write(STDOUT_FILENO, "Error parsing primary\n", 22);
-            output_token(peek_nth(2));
-            parse_errors++;
-            return NULL;
-        }
-    }
-
-    if (tk.type == TOKEN_IDENTIFIER && peek_nth(2).type == TOKEN_LPAREN) {
-        return parse_call_expr();
-    }
-
-    // Not a call_expr but still an identifier
-    if (tk.type == TOKEN_IDENTIFIER) {
-        next_token();
-        return ast_make_identifier(tk);
-    }
-
-    if (tk.type == TOKEN_LPAREN) {
-        next_token();
-        ASTNode *expr = parse_expression();
-        expect(TOKEN_RPAREN);
         return expr;
     }
-
-    write(STDOUT_FILENO, "Error parsing primary\n", 22);
-    output_token(tk);
-    parse_errors++;
-    return NULL;
 }
 
-/* <call_expr> ::= <identifier> ( <arg_list> ) */
-ASTNode *parse_call_expr(void) {
-    Token id = expect(TOKEN_IDENTIFIER);
-    expect(TOKEN_LPAREN);
+static AstNode *parse_unary(Parser *p) {
+    if (p->cur.kind == TOK_MINUS || p->cur.kind == TOK_BANG ||
+        p->cur.kind == TOK_TILDE) {
+        Token op = p->cur;
+        advance(p);
 
-    ASTNode *arg_list = NULL;
-    if (!accept(TOKEN_RPAREN)) {
-        arg_list = parse_arg_list();
-        expect(TOKEN_RPAREN);
+        AstNode *operand = parse_unary(p);
+
+        AstNode *unary   = new_node(AST_UNARY_EXPR);
+        switch (op.kind) {
+        case TOK_MINUS:
+            unary->as.unary_expr.op = UN_NEG;
+            break;
+        case TOK_BANG:
+        case TOK_KW_NOT:
+            unary->as.unary_expr.op = UN_NOT;
+            break;
+        case TOK_TILDE:
+            unary->as.unary_expr.op = UN_BITNOT;
+            break;
+        default:
+            fprintf(stderr,
+                    "parse error at %u:%u: unreachable in parse_unary\n",
+                    p->cur.line, p->cur.column);
+            abort();
+        }
+
+        unary->as.unary_expr.expr = operand;
+        return unary;
     }
 
-    ASTNode *call_expr = ast_make_call_expr(ast_make_identifier(id), arg_list,
-                                            id.line, id.column);
-    return call_expr;
+    return parse_postfix(p);
 }
 
-/* <arg_list> ::= <expression> { , <expression> } */
-ASTNode *parse_arg_list(void) {
-    Token tk          = peek_token();
-    ASTNode *arg_list = ast_make_arg_list(tk.line, tk.column);
-    do {
-        ASTNode *arg = parse_expression();
-        ast_add_child(arg_list, arg);
-    } while (accept(TOKEN_COMMA));
-
-    return arg_list;
+// ----- Binary expressions -----
+static AstNode *make_bin(AstBinOp op, AstNode *lhs, AstNode *rhs) {
+    AstNode *bin         = new_node(AST_BIN_EXPR);
+    bin->as.bin_expr.op  = op;
+    bin->as.bin_expr.lhs = lhs;
+    bin->as.bin_expr.rhs = rhs;
+    return bin;
 }
+
+static AstNode *parse_multiplicative(Parser *p) {
+    AstNode *expr = parse_unary(p);
+    for (;;) {
+        if (p->cur.kind == TOK_STAR) {
+            advance(p);
+            AstNode *rhs = parse_unary(p);
+            expr         = make_bin(BIN_MUL, expr, rhs);
+        } else if (p->cur.kind == TOK_SLASH) {
+            advance(p);
+            AstNode *rhs = parse_unary(p);
+            expr         = make_bin(BIN_DIV, expr, rhs);
+        } else if (p->cur.kind == TOK_PERCENT) {
+            advance(p);
+            AstNode *rhs = parse_unary(p);
+            expr         = make_bin(BIN_MOD, expr, rhs);
+        } else {
+            break;
+        }
+    }
+
+    return expr;
+}
+
+static AstNode *parse_additive(Parser *p) {
+    AstNode *expr = parse_multiplicative(p);
+
+    for (;;) {
+        if (p->cur.kind == TOK_PLUS) {
+            advance(p);
+            AstNode *rhs = parse_multiplicative(p);
+            expr         = make_bin(BIN_ADD, expr, rhs);
+        } else if (p->cur.kind == TOK_MINUS) {
+            advance(p);
+            AstNode *rhs = parse_multiplicative(p);
+            expr         = make_bin(BIN_SUB, expr, rhs);
+        } else {
+            break;
+        }
+    }
+
+    return expr;
+}
+
+static AstNode *parse_shift(Parser *p) {
+    AstNode *expr = parse_additive(p);
+
+    for (;;) {
+        if (p->cur.kind == TOK_SHL) {
+            advance(p);
+            AstNode *rhs = parse_additive(p);
+            expr         = make_bin(BIN_SHL, expr, rhs);
+        } else if (p->cur.kind == TOK_SHR) {
+            advance(p);
+            AstNode *rhs = parse_additive(p);
+            expr         = make_bin(BIN_SHR, expr, rhs);
+        } else {
+            break;
+        }
+    }
+
+    return expr;
+}
+
+static AstNode *parse_relational(Parser *p) {
+    AstNode *expr = parse_shift(p);
+
+    for (;;) {
+        if (p->cur.kind == TOK_LT) {
+            advance(p);
+            AstNode *rhs = parse_shift(p);
+            expr         = make_bin(BIN_LT, expr, rhs);
+        } else if (p->cur.kind == TOK_GT) {
+            advance(p);
+            AstNode *rhs = parse_shift(p);
+            expr         = make_bin(BIN_GT, expr, rhs);
+        } else if (p->cur.kind == TOK_LT_EQ) {
+            advance(p);
+            AstNode *rhs = parse_shift(p);
+            expr         = make_bin(BIN_LE, expr, rhs);
+        } else if (p->cur.kind == TOK_GT_EQ) {
+            advance(p);
+            AstNode *rhs = parse_shift(p);
+            expr         = make_bin(BIN_GE, expr, rhs);
+        } else {
+            break;
+        }
+    }
+
+    return expr;
+}
+
+static AstNode *parse_equality(Parser *p) {
+    AstNode *expr = parse_relational(p);
+
+    for (;;) {
+        if (p->cur.kind == TOK_EQ_EQ) {
+            advance(p);
+            AstNode *rhs = parse_relational(p);
+            expr         = make_bin(BIN_EQ, expr, rhs);
+        } else if (p->cur.kind == TOK_BANG_EQ) {
+            advance(p);
+            AstNode *rhs = parse_relational(p);
+            expr         = make_bin(BIN_NE, expr, rhs);
+        } else {
+            break;
+        }
+    }
+
+    return expr;
+}
+
+// ----- Bitwise expressions -----
+static AstNode *parse_bitand(Parser *p) {
+    AstNode *expr = parse_equality(p);
+
+    while (p->cur.kind == TOK_AMP) {
+        advance(p);
+        AstNode *rhs = parse_equality(p);
+        expr         = make_bin(BIN_BIT_AND, expr, rhs);
+    }
+
+    return expr;
+}
+
+static AstNode *parse_bitxor(Parser *p) {
+    AstNode *expr = parse_bitand(p);
+
+    while (p->cur.kind == TOK_CARET) {
+        advance(p);
+        AstNode *rhs = parse_bitand(p);
+        expr         = make_bin(BIN_BIT_XOR, expr, rhs);
+    }
+
+    return expr;
+}
+
+static AstNode *parse_bitor(Parser *p) {
+    AstNode *expr = parse_bitxor(p);
+
+    while (p->cur.kind == TOK_PIPE) {
+        advance(p);
+        AstNode *rhs = parse_bitxor(p);
+        expr         = make_bin(BIN_BIT_OR, expr, rhs);
+    }
+
+    return expr;
+}
+
+// ----- Logical expressions -----
+static AstNode *parse_logical_and(Parser *p) {
+    AstNode *expr = parse_bitor(p);
+
+    while (p->cur.kind == TOK_AMP_AMP || p->cur.kind == TOK_KW_AND) {
+        advance(p);
+        AstNode *rhs = parse_bitor(p);
+        expr         = make_bin(BIN_AND, expr, rhs);
+    }
+
+    return expr;
+}
+
+static AstNode *parse_logical_or(Parser *p) {
+    AstNode *expr = parse_logical_and(p);
+
+    while (p->cur.kind == TOK_PIPE_PIPE || p->cur.kind == TOK_KW_OR) {
+        advance(p);
+        AstNode *rhs = parse_logical_and(p);
+        expr         = make_bin(BIN_OR, expr, rhs);
+    }
+
+    return expr;
+}
+
+// ----- Assignment expressions -----
+static AstNode *make_assign(AstAssignOp op, AstNode *lhs, AstNode *rhs) {
+    AstNode *n            = new_node(AST_ASSIGN_EXPR);
+    n->as.assign_expr.op  = op;
+    n->as.assign_expr.lhs = lhs;
+    n->as.assign_expr.rhs = rhs;
+    return n;
+}
+static AstNode *parse_assignment(Parser *p) {
+    AstNode *lhs = parse_logical_or(p);
+
+    if (p->cur.kind == TOK_EQ) {
+        advance(p);
+        AstNode *rhs = parse_assignment(p);
+        return make_assign(ASSIGN_EQ, lhs, rhs);
+    }
+    // TODO: Add more assignment operators
+
+    return lhs;
+}
+
+// ----- Expressions -----
+static AstNode *parse_expr(Parser *p) { return parse_assignment(p); }
