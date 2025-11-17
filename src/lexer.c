@@ -256,8 +256,11 @@ static Token lex_number(Lexer *lx, const char *start, uint32_t line,
     }
 
     FloatLiteralInfo float_info;
+    float_info.suffix = FLOAT_SUFFIX_NONE;
+
     IntLiteralInfo int_info;
-    int_info.base = (uint8_t)base;
+    int_info.base   = (uint8_t)base;
+    int_info.suffix = INT_SUFFIX_NONE;
 
     if (is_float) {
         float_info.suffix = FLOAT_SUFFIX_NONE;
@@ -307,9 +310,9 @@ static Token lex_number(Lexer *lx, const char *start, uint32_t line,
                 IntSuffixKind suffix = make_suffix_kind(is_unsigned, width);
                 if (suffix == INT_SUFFIX_NONE) {
                     report(lx, "invalid integer width");
-                } else {
-                    int_info.suffix = suffix;
                 }
+
+                int_info.suffix = suffix;
             }
         }
     }
