@@ -58,9 +58,9 @@ void ir_func_free(IrFunc *fn) {
 void ir_module_add_func(IrModule *m, IrFunc *fn) {
     if (m->funcs_count == m->funcs_cap) {
         uint32_t new_cap = m->funcs_cap ? m->funcs_cap * 2 : 4;
-        m->funcs         = xrealloc(m->funcs, new_cap * sizeof(IrFunc *),
-                                    "ir_module_add_func");
-        m->funcs_cap     = new_cap;
+        m->funcs =
+            xrealloc(m->funcs, new_cap * sizeof(IrFunc), "ir_module_add_func");
+        m->funcs_cap = new_cap;
     }
     m->funcs[m->funcs_count++] = *fn;
 }
