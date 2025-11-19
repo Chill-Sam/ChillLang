@@ -1,4 +1,5 @@
 #include "lower_ir.h"
+#include "ast.h"
 #include "ir_builder.h"
 #include <stdlib.h>
 #include <string.h>
@@ -209,6 +210,21 @@ static IrValue lower_bin_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
         break;
     case BIN_MOD:
         op = IR_OP_MOD;
+        break;
+    case BIN_BIT_AND:
+        op = IR_OP_AND;
+        break;
+    case BIN_BIT_OR:
+        op = IR_OP_OR;
+        break;
+    case BIN_BIT_XOR:
+        op = IR_OP_XOR;
+        break;
+    case BIN_SHL:
+        op = IR_OP_SHL;
+        break;
+    case BIN_SHR:
+        op = IR_OP_SHR;
         break;
     default:
         fprintf(stderr, "lowering error: unsupported binary operator\n");
