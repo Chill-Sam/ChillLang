@@ -156,9 +156,16 @@ static AstNode *parse_func_decl(Parser *p) {
 
     parse_params(p, fn);
 
-    // TODO: Allow implicit void return type
-    fn->as.func_decl.return_type = parse_type_spec(p);
-    fn->as.func_decl.body        = parse_block(p);
+    fn->as.func_decl.return_type =
+        p->cur.kind == TOK_LBRACE
+            ? make_ident_node((Token){.kind   = TOK_IDENT,
+                                      .offset = p->cur.offset,
+                                      .length = 4,
+                                      .line   = p->cur.line,
+                                      .column = p->cur.column,
+                                      "void"})
+            : parse_type_spec(p);
+    fn->as.func_decl.body = parse_block(p);
 
     return fn;
 }
