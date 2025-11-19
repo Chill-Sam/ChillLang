@@ -91,6 +91,16 @@ static int token_eq_str(const Token *tok, const char *s) {
 }
 
 static TypeId lower_resolve_builtin_type(const Token *name_tok) {
+    if (token_eq_str(name_tok, "void"))
+        return TYPEID_VOID;
+    if (token_eq_str(name_tok, "i8"))
+        return TYPEID_I8;
+    if (token_eq_str(name_tok, "u8"))
+        return TYPEID_U8;
+    if (token_eq_str(name_tok, "i16"))
+        return TYPEID_I16;
+    if (token_eq_str(name_tok, "u16"))
+        return TYPEID_U16;
     if (token_eq_str(name_tok, "i32"))
         return TYPEID_I32;
     if (token_eq_str(name_tok, "u32"))
@@ -100,7 +110,6 @@ static TypeId lower_resolve_builtin_type(const Token *name_tok) {
     if (token_eq_str(name_tok, "u64"))
         return TYPEID_U64;
 
-    // TODO: Extend this list
     fprintf(stderr, "lowering error: unsupported type '%.*s' for IR\n",
             (int)name_tok->length, name_tok->lexeme);
     abort();
