@@ -20,8 +20,7 @@ void free_ir_module(IrModule *m) {
     if (!m)
         return;
     for (uint32_t i = 0; i < m->funcs_count; i++) {
-        free(m->funcs[i].insts);
-        free(m->funcs[i].name);
+        ir_func_free(&m->funcs[i]);
     }
     free(m->funcs);
     free(m);
@@ -40,6 +39,19 @@ IrFunc ir_func_create(char *name, TypeId ret_type, uint32_t num_params) {
     fn.value_count = num_params;
 
     return fn;
+}
+
+void ir_func_free(IrFunc *fn) {
+    if (!fn)
+        return;
+    for (uint32_t i = 0; i < fn->insts_count; i++) {
+        IrInst *inst = &fn->insts[i];
+        if (inst->op == IR_OP_CALL && inst->call_name) {
+            free(inst->call_name);
+        }
+    }
+    free(fn->insts);
+    free(fn->name);
 }
 
 void ir_module_add_func(IrModule *m, IrFunc fn) {
@@ -182,7 +194,13 @@ static void ir_dump_instr(const IrInst *in, FILE *out) {
         break;
 
     case IR_OP_CALL:
-        fprintf(out, " func=%p", (void *)in->func);
+        fprintf(out, " %s(", in->call_name ? in->call_name : "<null>");
+        for (uint8_t i = 0; i < in->call_arg_count; i++) {
+            if (i)
+                fputs(", ", out);
+            fprintf(out, "v%u", in->call_args[i]);
+        }
+        fputs(")", out);
         break;
 
     case IR_OP_RET:

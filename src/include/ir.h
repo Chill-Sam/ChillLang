@@ -1,6 +1,5 @@
 #pragma once
 
-#include "ast.h"
 #include "type.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -51,8 +50,11 @@ typedef struct IrInst {
     IrValue dst; // virtual register
     IrValue src0;
     IrValue src1;
-    int64_t imm;   // NOTE: CONST_INT only
-    AstNode *func; // pointer to AST_FUNC_DECL (NOTE: for now)
+    int64_t imm; // NOTE: CONST_INT only
+
+    char *call_name;
+    uint8_t call_arg_count;
+    IrValue call_args[6];
 } IrInst;
 
 typedef struct IrFunc {

@@ -22,5 +22,5 @@ IrValue irb_load(IrBuilder *b, TypeId type, IrValue addr);
 IrInstId irb_ret_void(IrBuilder *b);
 IrInstId irb_ret(IrBuilder *b, IrValue value);
 
-IrValue irb_call(IrBuilder *b, TypeId ret_type, AstNode *func,
+IrValue irb_call(IrBuilder *b, TypeId ret_type, const char *name,
                  uint32_t num_args, const IrValue *args);

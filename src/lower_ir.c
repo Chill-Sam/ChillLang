@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+static AstNode *g_translation_unit = NULL;
+
 typedef struct LowerVar {
     char *name;
     TypeId type;
@@ -114,6 +116,44 @@ static TypeId lower_resolve_builtin_type(const Token *name_tok) {
     fprintf(stderr, "lowering error: unsupported type '%.*s' for IR\n",
             (int)name_tok->length, name_tok->lexeme);
     abort();
+}
+
+static AstNode *find_func_decl_by_name(const char *name) {
+    AstNodeList *items = &g_translation_unit->as.translation_unit.items;
+    for (uint32_t i = 0; i < items->count; i++) {
+        AstNode *it = items->items[i];
+        if (it->kind != AST_FUNC_DECL)
+            continue;
+
+        Token *tok = &it->as.func_decl.name;
+        if (tok->length == strlen(name) &&
+            memcmp(tok->lexeme, name, tok->length) == 0) {
+            return it;
+        }
+    }
+    return NULL;
+}
+
+static TypeId get_func_ret_type(const char *name) {
+    AstNode *fn = find_func_decl_by_name(name);
+    if (!fn) {
+        fprintf(stderr, "lowering error: call to unknown function '%s'\n",
+                name);
+        abort();
+    }
+
+    AstFuncDecl *fd = &fn->as.func_decl;
+
+    if (!fd->return_type) {
+        return TYPEID_VOID;
+    }
+    if (fd->return_type->kind != AST_IDENT_EXPR) {
+        fprintf(stderr, "lowering error: unsupported return type in call\n");
+        abort();
+    }
+
+    Token *rtok = &fd->return_type->as.ident_expr.name;
+    return lower_resolve_builtin_type(rtok);
 }
 
 static IrValue lower_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
@@ -292,6 +332,46 @@ static IrValue lower_unary_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
     return irb_unop(b, op, t2, src);
 }
 
+static IrValue lower_call_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
+                               TypeId *out_type) {
+    AstCallExpr *call = &expr->as.call_expr;
+
+    if (call->callee->kind != AST_IDENT_EXPR) {
+        fprintf(stderr, "lowering error: only simple function calls supported "
+                        "in IR for now\n");
+        abort();
+    }
+
+    Token *name_tok = &call->callee->as.ident_expr.name;
+    char *name      = token_to_cstr(name_tok);
+
+    IrValue arg_vals[6];
+    uint32_t arg_count = 0;
+
+    AstNodeList *args  = &call->args;
+    if (args->count > 6) {
+        fprintf(stderr,
+                "lowering error: more than 6 call args not supported\n");
+        abort();
+    }
+
+    for (uint32_t i = 0; i < args->count; i++) {
+        TypeId arg_type;
+        IrValue arg_val       = lower_expr(b, scope, args->items[i], &arg_type);
+        arg_vals[arg_count++] = arg_val;
+        (void)arg_type;
+    }
+
+    TypeId ret_type = get_func_ret_type(name);
+    if (out_type)
+        *out_type = ret_type;
+
+    IrValue result = irb_call(b, ret_type, name, arg_count, arg_vals);
+
+    free(name);
+    return result;
+}
+
 static IrValue lower_assign_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
                                  TypeId *out_type) {
     AstAssignExpr *assign = &expr->as.assign_expr;
@@ -328,7 +408,6 @@ static IrValue lower_assign_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
     in.src0 = rhs;
     in.src1 = (IrValue)~0u;
     in.imm  = 0;
-    in.func = NULL;
 
     irb_emit(b, in);
 
@@ -351,6 +430,9 @@ static IrValue lower_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
 
     case AST_UNARY_EXPR:
         return lower_unary_expr(b, scope, expr, out_type);
+
+    case AST_CALL_EXPR:
+        return lower_call_expr(b, scope, expr, out_type);
 
     case AST_ASSIGN_EXPR:
         return lower_assign_expr(b, scope, expr, out_type);
@@ -398,7 +480,6 @@ static void lower_var_decl(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
         in.src0 = init;
         in.src1 = (IrValue)~0u;
         in.imm  = 0;
-        in.func = NULL;
 
         irb_emit(b, in);
     }
@@ -516,7 +597,9 @@ IrModule *lower_to_ir(AstNode *tu) {
         abort();
     }
 
-    IrModule *m = malloc(sizeof *m);
+    g_translation_unit = tu;
+
+    IrModule *m        = malloc(sizeof *m);
     if (!m) {
         fprintf(stderr, "fatal: out of memory in lower_to_ir\n");
         abort();
