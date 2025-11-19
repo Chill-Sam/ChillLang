@@ -142,7 +142,7 @@ static IrValue lower_ident(IrBuilder *b, LowerScope *scope, AstNode *expr,
 }
 
 static int64_t parse_int_literal(const Token *tok) {
-    // crude: assume base-10, ignore suffix/base fields for now.
+    // NOTE:: assume base-10, ignore suffix/base fields for now.
     char *buf = malloc(tok->length + 1);
     if (!buf) {
         fprintf(stderr, "fatal: out of memory in parse_int_literal\n");
@@ -166,8 +166,36 @@ static IrValue lower_literal(IrBuilder *b, AstNode *expr, TypeId *out_type) {
     }
 
     // Default to i32 for now
-    // TODO: use suffix info later
     TypeId t = TYPEID_I32;
+    switch (tok->lit.int_literal.suffix) {
+    case INT_SUFFIX_I8:
+        t = TYPEID_I8;
+        break;
+    case INT_SUFFIX_I16:
+        t = TYPEID_I16;
+        break;
+    case INT_SUFFIX_I32:
+        t = TYPEID_I32;
+        break;
+    case INT_SUFFIX_I64:
+        t = TYPEID_I64;
+        break;
+    case INT_SUFFIX_U8:
+        t = TYPEID_U8;
+        break;
+    case INT_SUFFIX_U16:
+        t = TYPEID_U16;
+        break;
+    case INT_SUFFIX_U32:
+        t = TYPEID_U32;
+        break;
+    case INT_SUFFIX_U64:
+        t = TYPEID_U64;
+        break;
+    default:
+        break;
+    }
+
     if (out_type)
         *out_type = t;
 
