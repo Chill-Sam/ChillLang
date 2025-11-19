@@ -401,15 +401,7 @@ static IrValue lower_assign_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
         abort();
     }
 
-    IrInst in;
-    in.op   = IR_OP_MOV;
-    in.type = lv->type;
-    in.dst  = lv->value;
-    in.src0 = rhs;
-    in.src1 = (IrValue)~0u;
-    in.imm  = 0;
-
-    irb_emit(b, in);
+    lv->value = rhs;
 
     if (out_type)
         *out_type = lv->type;
@@ -458,11 +450,9 @@ static void lower_var_decl(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
 
     Token *type_tok = &var->type->as.ident_expr.name;
     TypeId type     = lower_resolve_builtin_type(type_tok);
-
-    IrValue v       = irb_new_value(b);
     char *name      = token_to_cstr(&var->name);
-    lscope_add_var(scope, name, type, v);
-    free(name);
+
+    IrValue v;
 
     if (var->init) {
         TypeId t;
@@ -473,16 +463,13 @@ static void lower_var_decl(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
             abort();
         }
 
-        IrInst in;
-        in.op   = IR_OP_MOV;
-        in.type = type;
-        in.dst  = v;
-        in.src0 = init;
-        in.src1 = (IrValue)~0u;
-        in.imm  = 0;
-
-        irb_emit(b, in);
+        v = init;
+    } else {
+        v = irb_new_value(b);
     }
+
+    lscope_add_var(scope, name, type, v);
+    free(name);
 }
 
 static void lower_return(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
