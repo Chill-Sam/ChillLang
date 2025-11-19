@@ -46,7 +46,7 @@ void parser_init(Parser *p, Lexer *lx) {
 }
 
 static AstNode *new_node(AstNodeKind kind) {
-    AstNode *n = malloc(sizeof *n); // later: arena
+    AstNode *n = malloc(sizeof *n);
     n->kind    = kind;
     return n;
 }
@@ -99,6 +99,11 @@ AstNode *parse_translation_unit(Parser *p) {
     }
 
     return root;
+}
+
+void free_translation_unit(AstNode *tu) {
+    ast_list_free(&tu->as.translation_unit.items);
+    free(tu);
 }
 
 // ----- Function parsing -----
