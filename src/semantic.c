@@ -337,7 +337,16 @@ static TypeId sema_expr_call(Scope *scope, AstNode *expr) {
         sema_fatal(name_tok, "wrong number of arguments");
     }
 
-    // TODO: Check argument types
+    for (uint32_t i = 0; i < call->args.count; i++) {
+        TypeId arg_type   = sema_expr(scope, call->args.items[i]);
+        TypeId param_type = sema_resolve_type_name(
+            g_global_scope, params->items[i]->as.param.type);
+
+        // TODO: Type promotion ?
+        if (arg_type != param_type) {
+            sema_fatal(name_tok, "type mismatch in argument");
+        }
+    }
 
     if (!fn->as.func_decl.return_type) {
         return TYPEID_VOID;
