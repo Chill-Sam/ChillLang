@@ -479,8 +479,6 @@ static void sema_pass2_analyze_functions(AstNode *tu) {
 }
 
 void sema_analyze(AstNode *tu) {
-    types_init();
-
     g_global_scope = scope_create(NULL);
     sema_init_builtin_types(g_global_scope);
 

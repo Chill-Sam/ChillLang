@@ -97,24 +97,20 @@ const Type *type_get(TypeId id) {
 }
 
 void types_init(void) {
-    type_table    = NULL;
-    type_count    = 0;
-    type_capacity = 0;
+    TYPEID_VOID = type_add(type_make_void());
+    TYPEID_BOOL = type_add(type_make_bool());
 
-    TYPEID_VOID   = type_add(type_make_void());
-    TYPEID_BOOL   = type_add(type_make_bool());
+    TYPEID_I8   = type_add(type_make_int(8, false));
+    TYPEID_U8   = type_add(type_make_int(8, true));
+    TYPEID_I16  = type_add(type_make_int(16, false));
+    TYPEID_U16  = type_add(type_make_int(16, true));
+    TYPEID_I32  = type_add(type_make_int(32, false));
+    TYPEID_U32  = type_add(type_make_int(32, true));
+    TYPEID_I64  = type_add(type_make_int(64, false));
+    TYPEID_U64  = type_add(type_make_int(64, true));
 
-    TYPEID_I8     = type_add(type_make_int(8, false));
-    TYPEID_U8     = type_add(type_make_int(8, true));
-    TYPEID_I16    = type_add(type_make_int(16, false));
-    TYPEID_U16    = type_add(type_make_int(16, true));
-    TYPEID_I32    = type_add(type_make_int(32, false));
-    TYPEID_U32    = type_add(type_make_int(32, true));
-    TYPEID_I64    = type_add(type_make_int(64, false));
-    TYPEID_U64    = type_add(type_make_int(64, true));
-
-    TYPEID_F32    = type_add(type_make_float(32));
-    TYPEID_F64    = type_add(type_make_float(64));
+    TYPEID_F32  = type_add(type_make_float(32));
+    TYPEID_F64  = type_add(type_make_float(64));
 }
 
 bool type_is_integer(TypeId id) {
