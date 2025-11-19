@@ -16,53 +16,40 @@ void ir_module_init(IrModule *m) {
     m->funcs_cap   = 0;
 }
 
-void ir_module_free(IrModule *m) {
+void free_ir_module(IrModule *m) {
     if (!m)
         return;
     for (uint32_t i = 0; i < m->funcs_count; i++) {
-        ir_func_free(&m->funcs[i]);
+        free(m->funcs[i].insts);
+        free(m->funcs[i].name);
     }
     free(m->funcs);
-    m->funcs       = NULL;
-    m->funcs_count = 0;
-    m->funcs_cap   = 0;
+    free(m);
 }
 
-IrFunc *ir_func_create(const char *name, TypeId ret_type, uint32_t num_params) {
-    IrFunc *fn = malloc(sizeof *fn);
-    if (!fn) {
-        fprintf(stderr, "fatal: out of memory in ir_func_create\n");
-        abort();
-    }
+IrFunc ir_func_create(char *name, TypeId ret_type, uint32_t num_params) {
+    IrFunc fn;
+    fn.name        = name;
+    fn.return_type = ret_type;
+    fn.num_args    = num_params;
 
-    fn->name        = name;
-    fn->return_type = ret_type;
-    fn->num_args    = num_params;
+    fn.insts       = NULL;
+    fn.insts_count = 0;
+    fn.insts_cap   = 0;
 
-    fn->insts       = NULL;
-    fn->insts_count = 0;
-    fn->insts_cap   = 0;
-
-    fn->value_count = num_params;
+    fn.value_count = num_params;
 
     return fn;
 }
 
-void ir_func_free(IrFunc *fn) {
-    if (!fn)
-        return;
-    free(fn->insts);
-    free(fn);
-}
-
-void ir_module_add_func(IrModule *m, IrFunc *fn) {
+void ir_module_add_func(IrModule *m, IrFunc fn) {
     if (m->funcs_count == m->funcs_cap) {
         uint32_t new_cap = m->funcs_cap ? m->funcs_cap * 2 : 4;
         m->funcs =
             xrealloc(m->funcs, new_cap * sizeof(IrFunc), "ir_module_add_func");
         m->funcs_cap = new_cap;
     }
-    m->funcs[m->funcs_count++] = *fn;
+    m->funcs[m->funcs_count++] = fn;
 }
 
 IrInstId ir_func_add_inst(IrFunc *fn, IrInst inst) {

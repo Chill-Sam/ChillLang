@@ -12,7 +12,7 @@ typedef enum IrOp {
     IR_OP_INVALID = 0,
 
     IR_CONST_INT, // dst = imm
-    //
+
     IR_OP_ADD,
     IR_OP_SUB,
     IR_OP_MUL,
@@ -56,7 +56,7 @@ typedef struct IrInst {
 } IrInst;
 
 typedef struct IrFunc {
-    const char *name;
+    char *name;
     TypeId return_type;
     uint32_t num_args;
 
@@ -75,12 +75,12 @@ typedef struct IrModule {
 
 // Module / function lifetime
 void ir_module_init(IrModule *m);
-void ir_module_free(IrModule *m);
+void free_ir_module(IrModule *m);
 
-IrFunc *ir_func_create(const char *name, TypeId ret_type, uint32_t num_params);
+IrFunc ir_func_create(char *name, TypeId ret_type, uint32_t num_params);
 void ir_func_free(IrFunc *fn);
 
-void ir_module_add_func(IrModule *m, IrFunc *fn);
+void ir_module_add_func(IrModule *m, IrFunc fn);
 
 // Instruction emission
 IrInstId ir_func_add_inst(IrFunc *fn, IrInst inst);

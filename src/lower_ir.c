@@ -110,7 +110,7 @@ static IrValue lower_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
                           TypeId *out_type);
 static void lower_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt);
 static void lower_block(IrBuilder *b, LowerScope *parent_scope, AstNode *block);
-static IrFunc *lower_func(AstNode *fn);
+static IrFunc lower_func(AstNode *fn);
 
 static IrValue lower_ident(IrBuilder *b, LowerScope *scope, AstNode *expr,
                            TypeId *out_type) {
@@ -412,13 +412,13 @@ static void lower_block(IrBuilder *b, LowerScope *parent_scope,
     lscope_free(scope);
 }
 
-static IrFunc *lower_func(AstNode *fn) {
+static IrFunc lower_func(AstNode *fn) {
     AstFuncDecl *fd = &fn->as.func_decl;
 
     TypeId ret_type = TYPEID_VOID;
     if (fd->return_type) {
         if (fd->return_type->kind != AST_IDENT_EXPR) {
-            fprintf(stderr, "lowering error: unsopported return type\n");
+            fprintf(stderr, "lowering error: unsupported return type\n");
             abort();
         }
 
@@ -426,12 +426,10 @@ static IrFunc *lower_func(AstNode *fn) {
         ret_type    = lower_resolve_builtin_type(rtok);
     }
 
-    char *name = token_to_cstr(&fd->name);
-    fprintf(stderr, "lowering func %s\n", name);
-    IrFunc *ir_fn = ir_func_create(name, ret_type, fd->params.count);
-
+    char *name   = token_to_cstr(&fd->name);
+    IrFunc ir_fn = ir_func_create(name, ret_type, fd->params.count);
     IrBuilder b;
-    ir_builder_init(&b, ir_fn);
+    ir_builder_init(&b, &ir_fn);
 
     LowerScope *scope = lscope_create(NULL);
 
@@ -440,7 +438,7 @@ static IrFunc *lower_func(AstNode *fn) {
         AstParam *param     = &param_node->as.param;
 
         if (param->type->kind != AST_IDENT_EXPR) {
-            fprintf(stderr, "lowering error: unsopported param type\n");
+            fprintf(stderr, "lowering error: unsupported param type\n");
             abort();
         }
 
@@ -456,7 +454,6 @@ static IrFunc *lower_func(AstNode *fn) {
     lower_block(&b, scope, fd->body);
 
     lscope_free(scope);
-    // free(name);
     return ir_fn;
 }
 
@@ -478,7 +475,7 @@ IrModule *lower_to_ir(AstNode *tu) {
     for (uint32_t i = 0; i < items->count; i++) {
         AstNode *it = items->items[i];
         if (it->kind == AST_FUNC_DECL) {
-            IrFunc *fn = lower_func(it);
+            IrFunc fn = lower_func(it);
             ir_module_add_func(m, fn);
         } else {
             // TODO: structs

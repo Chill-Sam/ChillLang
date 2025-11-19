@@ -108,6 +108,7 @@ int main(int argc, char **argv) {
 
     lexer_destroy(lx);
     free_translation_unit(root);
+    free_ir_module(mod);
     free(src);
     return 0;
 }
