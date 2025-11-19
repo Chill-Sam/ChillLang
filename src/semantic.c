@@ -8,7 +8,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct Context {
+    TypeId return_type;
+} Context;
+
 static Scope *g_global_scope = NULL;
+static Context ctx;
 
 static char *token_to_cstr(const Token *tok) {
     char *s = malloc(tok->length + 1);
@@ -410,7 +415,12 @@ static void sema_stmt(Scope *scope, AstNode *stmt) {
 
     case AST_RETURN_STMT:
         if (stmt->as.return_stmt.expr) {
-            (void)sema_expr(scope, stmt->as.return_stmt.expr);
+            TypeId t = sema_expr(scope, stmt->as.return_stmt.expr);
+            // TODO: Allow type promotion ?
+            if (ctx.return_type != t) {
+                sema_fatal(NULL, "mismatched types in return statement");
+            }
+            ctx.return_type = TYPEID_VOID;
         }
         break;
 
@@ -445,6 +455,7 @@ static void sema_func(AstNode *fn) {
     if (func->return_type) {
         return_type = sema_resolve_type_name(g_global_scope, func->return_type);
     }
+    ctx.return_type     = return_type;
 
     Scope *fn_scope     = scope_create(g_global_scope);
 
