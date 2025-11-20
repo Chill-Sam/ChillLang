@@ -82,6 +82,19 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const IrInst *inst) {
         break;
     }
 
+    case IR_OP_MOD: {
+        int off_dst = stack_offset_for_value(fn, inst->dst);
+        int off0    = stack_offset_for_value(fn, inst->src0);
+        int off1    = stack_offset_for_value(fn, inst->src1);
+
+        fprintf(out, "    mov rax, QWORD PTR [rbp%+d]\n", off0);
+        fprintf(out, "    mov rbx, QWORD PTR [rbp%+d]\n", off1);
+        fprintf(out, "    cqo\n");
+        fprintf(out, "    idiv rbx\n");
+        fprintf(out, "    mov QWORD PTR [rbp%+d], rdx\n", off_dst);
+        break;
+    }
+
     case IR_OP_MOV: {
         int off_dst = stack_offset_for_value(fn, inst->dst);
         int off_src = stack_offset_for_value(fn, inst->src0);
