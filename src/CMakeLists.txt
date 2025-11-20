@@ -9,6 +9,7 @@ set(SOURCES
     ir.c
     ir_builder.c
     lower_ir.c
+    x64_codegen.c
 )
 
 add_executable(chc ${SOURCES})
