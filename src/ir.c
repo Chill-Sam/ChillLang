@@ -37,6 +37,14 @@ IrFunc ir_func_create(char *name, TypeId ret_type, uint32_t num_params) {
     fn.insts_cap   = 0;
 
     fn.value_count = num_params;
+    fn.value_types = NULL;
+    if (num_params > 0) {
+        fn.value_types = malloc(num_params * sizeof(TypeId));
+        if (!fn.value_types) {
+            fprintf(stderr, "fatal: out of memory in ir_func_create\n");
+            abort();
+        }
+    }
 
     return fn;
 }
@@ -52,6 +60,7 @@ void ir_func_free(IrFunc *fn) {
     }
     free(fn->insts);
     free(fn->name);
+    free(fn->value_types);
 }
 
 void ir_module_add_func(IrModule *m, IrFunc fn) {
@@ -75,10 +84,15 @@ IrInstId ir_func_add_inst(IrFunc *fn, IrInst inst) {
     return fn->insts_count - 1;
 }
 
-IrValue ir_func_new_value(IrFunc *fn) {
+IrValue ir_func_new_value(IrFunc *fn, TypeId type) {
     IrValue v = fn->value_count;
     fn->value_count++;
-    return v;
+
+    fn->value_types = xrealloc(
+        fn->value_types, fn->value_count * sizeof(TypeId), "ir_func_new_value");
+    fn->value_types[v] = type;
+
+    return (IrValue)v;
 }
 
 // ------ Dumping ------

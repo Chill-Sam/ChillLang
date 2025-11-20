@@ -15,13 +15,16 @@ static char *irb_strdup(const char *s) {
 
 void ir_builder_init(IrBuilder *b, IrFunc *fn) { b->func = fn; }
 
-IrValue irb_new_value(IrBuilder *b) { return ir_func_new_value(b->func); }
+IrValue irb_new_value(IrBuilder *b, TypeId type) {
+    return ir_func_new_value(b->func, type);
+}
+
 IrInstId irb_emit(IrBuilder *b, IrInst inst) {
     return ir_func_add_inst(b->func, inst);
 }
 
 IrValue irb_const_int(IrBuilder *b, TypeId type, int64_t imm) {
-    IrValue dst = irb_new_value(b);
+    IrValue dst = irb_new_value(b, type);
 
     IrInst inst;
     inst.op   = IR_CONST_INT;
@@ -37,7 +40,7 @@ IrValue irb_const_int(IrBuilder *b, TypeId type, int64_t imm) {
 
 IrValue irb_binop(IrBuilder *b, IrOp op, TypeId type, IrValue lhs,
                   IrValue rhs) {
-    IrValue dst = irb_new_value(b);
+    IrValue dst = irb_new_value(b, type);
 
     IrInst inst;
     inst.op   = op;
@@ -52,7 +55,7 @@ IrValue irb_binop(IrBuilder *b, IrOp op, TypeId type, IrValue lhs,
 }
 
 IrValue irb_unop(IrBuilder *b, IrOp op, TypeId type, IrValue src) {
-    IrValue dst = irb_new_value(b);
+    IrValue dst = irb_new_value(b, type);
 
     IrInst inst;
     inst.op   = op;
@@ -67,7 +70,7 @@ IrValue irb_unop(IrBuilder *b, IrOp op, TypeId type, IrValue src) {
 }
 
 IrValue irb_mov(IrBuilder *b, TypeId type, IrValue src) {
-    IrValue dst = irb_new_value(b);
+    IrValue dst = irb_new_value(b, type);
 
     IrInst inst;
     inst.op   = IR_OP_MOV;
@@ -94,7 +97,7 @@ IrInstId irb_store(IrBuilder *b, IrValue addr, IrValue src) {
 }
 
 IrValue irb_load(IrBuilder *b, TypeId type, IrValue addr) {
-    IrValue dst = irb_new_value(b);
+    IrValue dst = irb_new_value(b, type);
 
     IrInst inst;
     inst.op   = IR_OP_LOAD;
@@ -120,10 +123,10 @@ IrInstId irb_ret_void(IrBuilder *b) {
     return irb_emit(b, inst);
 }
 
-IrInstId irb_ret(IrBuilder *b, IrValue value) {
+IrInstId irb_ret(IrBuilder *b, IrValue value, TypeId type) {
     IrInst inst;
     inst.op   = IR_OP_RET;
-    inst.type = TYPEID_VOID;
+    inst.type = type;
     inst.dst  = (IrValue)~0u;
     inst.src0 = value;
     inst.src1 = (IrValue)~0u;
@@ -140,7 +143,8 @@ IrValue irb_call(IrBuilder *b, TypeId ret_type, const char *name,
         abort();
     }
 
-    IrValue dst = (ret_type == TYPEID_VOID) ? (IrValue)~0u : irb_new_value(b);
+    IrValue dst =
+        (ret_type == TYPEID_VOID) ? (IrValue)~0u : irb_new_value(b, ret_type);
 
     IrInst inst;
     inst.op             = IR_OP_CALL;

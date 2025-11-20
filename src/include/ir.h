@@ -67,6 +67,7 @@ typedef struct IrFunc {
     uint32_t insts_cap;
 
     uint32_t value_count; // number of virtual values used
+    TypeId *value_types;
 } IrFunc;
 
 typedef struct IrModule {
@@ -88,7 +89,7 @@ void ir_module_add_func(IrModule *m, IrFunc fn);
 IrInstId ir_func_add_inst(IrFunc *fn, IrInst inst);
 
 // Virtual value management
-IrValue ir_func_new_value(IrFunc *fn);
+IrValue ir_func_new_value(IrFunc *fn, TypeId type);
 
 // Debug dump
 void ir_dump_func(const IrFunc *fn, FILE *out);

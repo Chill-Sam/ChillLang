@@ -465,7 +465,7 @@ static void lower_var_decl(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
 
         v = init;
     } else {
-        v = irb_new_value(b);
+        v = irb_new_value(b, type);
     }
 
     lscope_add_var(scope, name, type, v);
@@ -480,9 +480,8 @@ static void lower_return(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
 
     TypeId t;
     IrValue v = lower_expr(b, scope, stmt->as.return_stmt.expr, &t);
-    (void)t; // NOTE: Trust sematic analysis to ensure this is correct
 
-    irb_ret(b, v);
+    irb_ret(b, v, t);
 }
 
 static void lower_expr_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
@@ -567,7 +566,14 @@ static IrFunc lower_func(AstNode *fn) {
         TypeId type     = lower_resolve_builtin_type(type_tok);
 
         char *pname     = token_to_cstr(&param->name);
-        IrValue v       = (IrValue)i;
+
+        if (i >= ir_fn.value_count) {
+            fprintf(stderr, "lowering error: too many params\n");
+            abort();
+        }
+
+        ir_fn.value_types[i] = type;
+        IrValue v            = (IrValue)i;
         lscope_add_var(scope, pname, type, v);
         free(pname);
     }

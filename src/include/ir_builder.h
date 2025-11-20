@@ -8,7 +8,7 @@ typedef struct IrBuilder {
 
 void ir_builder_init(IrBuilder *b, IrFunc *fn);
 
-IrValue irb_new_value(IrBuilder *b);
+IrValue irb_new_value(IrBuilder *b, TypeId type);
 IrInstId irb_emit(IrBuilder *b, IrInst inst);
 
 IrValue irb_const_int(IrBuilder *b, TypeId type, int64_t imm);
@@ -20,7 +20,7 @@ IrInstId irb_store(IrBuilder *b, IrValue addr, IrValue src);
 IrValue irb_load(IrBuilder *b, TypeId type, IrValue addr);
 
 IrInstId irb_ret_void(IrBuilder *b);
-IrInstId irb_ret(IrBuilder *b, IrValue value);
+IrInstId irb_ret(IrBuilder *b, IrValue value, TypeId type);
 
 IrValue irb_call(IrBuilder *b, TypeId ret_type, const char *name,
                  uint32_t num_args, const IrValue *args);
