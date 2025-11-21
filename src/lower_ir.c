@@ -425,7 +425,7 @@ static IrValue lower_cast_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
     TypeId src_t;
     IrValue src  = lower_expr(b, scope, cast->expr, &src_t);
 
-    TypeId dst_t = cast->target;
+    TypeId dst_t = cast->target_type;
 
     if (src_t == dst_t) {
         if (out_type)

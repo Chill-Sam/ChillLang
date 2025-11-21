@@ -284,7 +284,7 @@ static void ast_dump_call_expr(AstNode *node, int indent) {
 
 static void ast_dump_cast_expr(AstNode *node, int indent) {
     print_indent(indent);
-    fprintf(stdout, "CastExpr target = %d\n", node->as.cast_expr.target);
+    fprintf(stdout, "CastExpr target = %d\n", node->as.cast_expr.target_type);
 
     print_indent(indent + 1);
     fputs("Expr:\n", stdout);

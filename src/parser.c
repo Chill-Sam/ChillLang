@@ -362,6 +362,18 @@ static AstNode *parse_postfix(Parser *p) {
             continue;
         }
 
+        if (p->cur.kind == TOK_KW_AS) {
+            // Cast expression
+            advance(p);
+
+            AstNode *target           = parse_type_spec(p);
+            AstNode *cast             = new_node(AST_CAST_EXPR);
+            cast->as.cast_expr.expr   = expr;
+            cast->as.cast_expr.target = target;
+            expr                      = cast;
+            continue;
+        }
+
         return expr;
     }
 }

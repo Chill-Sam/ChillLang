@@ -40,10 +40,10 @@ static AstNode *sema_insert_cast(AstNode *expr, TypeId target) {
     if (expr->type_id == target)
         return expr;
 
-    AstNode *cast             = new_node(AST_CAST_EXPR);
-    cast->as.cast_expr.expr   = expr;
-    cast->as.cast_expr.target = target;
-    cast->type_id             = target;
+    AstNode *cast                  = new_node(AST_CAST_EXPR);
+    cast->as.cast_expr.expr        = expr;
+    cast->as.cast_expr.target_type = target;
+    cast->type_id                  = target;
     return cast;
 }
 
@@ -428,7 +428,11 @@ static TypeId sema_expr(Scope *scope, AstNode *expr) {
 
     case AST_CAST_EXPR:
         sema_expr(scope, expr->as.cast_expr.expr);
-        expr->type_id = expr->as.cast_expr.target;
+        if (expr->as.cast_expr.target) {
+            expr->as.cast_expr.target_type = sema_resolve_type_name(
+                g_global_scope, expr->as.cast_expr.target);
+        }
+        expr->type_id = expr->as.cast_expr.target_type;
         return expr->type_id;
 
     default:

@@ -11,7 +11,7 @@
 "(" ")" "{" "}" "+" "-" "*" "/" "%" "," ";" "=" "<" ">" "&" "|" "^" "~"
 
 ## keywords: 
-"fun" "return" "mut" "if" "else" "while" "for" "struct" "and" "or" "not"
+"fun" "return" "mut" "if" "else" "while" "for" "struct" "and" "or" "not" "as"
 
 # Top-level
 <program> ::= { <function_def> } ;
@@ -54,7 +54,7 @@
 <mul>          ::= <unary> { * | / | % <unary> } ;
 <unary>        ::= { - | ~ } <unary> | <postfix> ;
 <postfix>      ::= <primary> <postfix_tail>* ;
-<postfix_tail> ::= <call> | <member_access> ;
+<postfix_tail> ::= <call> | <member_access> | as <type> ;
 <call>         ::= ( { <expression> ("," <expression>)* } ) ;
 <member_access> ::= . <identifier> ;
 <primary>       ::= <identifier> | <literal> | ( <expression> ) ;

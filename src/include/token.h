@@ -49,6 +49,7 @@ typedef enum TokenKind {
     TOK_KW_STRUCT,
     TOK_KW_FUN,
     TOK_KW_MUT,
+    TOK_KW_AS,
     TOK_KW_AND,
     TOK_KW_OR,
     TOK_KW_NOT,
@@ -151,6 +152,8 @@ static const char *token_kind_name(TokenKind k) {
         return "KW_FUN";
     case TOK_KW_MUT:
         return "KW_MUT";
+    case TOK_KW_AS:
+        return "KW_AS";
     case TOK_KW_AND:
         return "KW_AND";
     case TOK_KW_OR:

@@ -349,8 +349,8 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         const char *src_mem = cg_mem_prefix(src_t);
 
         if (inst->op == IR_OP_TRUNC) {
-            const char *reg = cg_reg_for_type(src_t);
-            fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, src_mem, off_src);
+            const char *reg = cg_reg_for_type(dst_t);
+            fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, dst_mem, off_src);
             fprintf(out, "    mov %s [rbp%+d], %s\n", dst_mem, off_dst, reg);
             break;
         }
@@ -455,6 +455,7 @@ static void x64_emit_func(FILE *out, const IrFunc *fn) {
     }
 
     x64_emit_epilogue(out);
+    cg_free_frame(&fl);
 }
 
 void x64_emit_module(FILE *out, const IrModule *m) {

@@ -138,7 +138,8 @@ typedef struct AstAssignExpr {
 
 typedef struct AstCastExpr {
     AstNode *expr;
-    TypeId target;
+    AstNode *target;
+    TypeId target_type;
 } AstCastExpr;
 
 typedef struct AstCallExpr {
