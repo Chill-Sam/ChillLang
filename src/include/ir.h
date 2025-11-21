@@ -35,6 +35,10 @@ typedef enum IrOp {
     IR_OP_NOT,
     IR_OP_BITNOT,
 
+    IR_OP_ZEXT,
+    IR_OP_SEXT,
+    IR_OP_TRUNC,
+
     IR_OP_MOV, // dst = src0
 
     IR_OP_LOAD,  // dst = [addr]

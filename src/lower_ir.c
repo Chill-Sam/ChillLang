@@ -52,6 +52,16 @@ static LowerScope *lscope_create(LowerScope *parent) {
     return s;
 }
 
+static int lw_type_width(TypeId t) {
+    const Type *ty = type_get(t);
+    return ty->bit_width;
+}
+
+static int lw_type_is_signed(TypeId t) {
+    const Type *ty = type_get(t);
+    return !ty->is_unsigned;
+}
+
 static void lscope_free(LowerScope *s) {
     if (!s)
         return;
@@ -408,6 +418,45 @@ static IrValue lower_assign_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
     return lv->value;
 }
 
+static IrValue lower_cast_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
+                               TypeId *out_type) {
+    AstCastExpr *cast = &expr->as.cast_expr;
+
+    TypeId src_t;
+    IrValue src  = lower_expr(b, scope, cast->expr, &src_t);
+
+    TypeId dst_t = cast->target;
+
+    if (src_t == dst_t) {
+        if (out_type)
+            *out_type = dst_t;
+        return src;
+    }
+
+    int src_w      = lw_type_width(src_t);
+    int dst_w      = lw_type_width(dst_t);
+    int src_signed = lw_type_is_signed(src_t);
+    int dst_signed = lw_type_is_signed(dst_t);
+
+    if (src_w < dst_w) {
+        IrOp op   = src_signed ? IR_OP_SEXT : IR_OP_ZEXT;
+        IrValue v = irb_unary_cast(b, op, dst_t, src);
+        if (out_type)
+            *out_type = dst_t;
+        return v;
+    } else if (src_w > dst_w) {
+        IrValue v = irb_unary_cast(b, IR_OP_TRUNC, dst_t, src);
+        if (out_type)
+            *out_type = dst_t;
+        return v;
+    } else {
+        // Same-width, reinterpret as new signedness
+        if (out_type)
+            *out_type = dst_t;
+        return src;
+    }
+}
+
 static IrValue lower_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
                           TypeId *out_type) {
     switch (expr->kind) {
@@ -428,6 +477,9 @@ static IrValue lower_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
 
     case AST_ASSIGN_EXPR:
         return lower_assign_expr(b, scope, expr, out_type);
+
+    case AST_CAST_EXPR:
+        return lower_cast_expr(b, scope, expr, out_type);
 
     default:
         // TODO: Handle other expr kinds, e.g. call expr and member expr

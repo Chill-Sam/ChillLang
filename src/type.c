@@ -8,6 +8,7 @@ static Type *type_table       = NULL;
 static uint16_t type_count    = 0;
 static uint16_t type_capacity = 0;
 
+TypeId TYPEID_INVALID         = -1;
 TypeId TYPEID_VOID            = 0;
 TypeId TYPEID_BOOL            = 0;
 TypeId TYPEID_I8              = 0;
@@ -136,4 +137,33 @@ bool type_is_unsigned(TypeId id) {
 uint16_t type_bit_width(TypeId id) {
     const Type *t = type_get(id);
     return t->bit_width;
+}
+
+bool type_same_signedness(TypeId a, TypeId b) {
+    return type_is_signed(a) == type_is_signed(b);
+}
+
+TypeId type_binary_result(TypeId a, TypeId b) {
+    if (!type_is_integer(a) || !type_is_integer(b))
+        return TYPEID_INVALID;
+
+    if (!type_same_signedness(a, b))
+        return TYPEID_INVALID;
+
+    int wa = type_bit_width(a);
+    int wb = type_bit_width(b);
+
+    // TODO: Handle floats
+    return (wa >= wb) ? a : b;
+}
+
+bool type_can_implicitly_convert(TypeId src, TypeId dst) {
+    if (!type_is_integer(src) || !type_is_integer(dst))
+        return false;
+
+    if (!type_same_signedness(src, dst))
+        return false;
+
+    // TODO: Handle floats
+    return type_bit_width(src) <= type_bit_width(dst);
 }

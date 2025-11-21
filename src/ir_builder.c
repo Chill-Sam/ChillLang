@@ -84,6 +84,21 @@ IrValue irb_mov(IrBuilder *b, TypeId type, IrValue src) {
     return dst;
 }
 
+IrValue irb_unary_cast(IrBuilder *b, IrOp op, TypeId dst_type, IrValue src) {
+    IrValue dst = irb_new_value(b, dst_type);
+
+    IrInst inst;
+    inst.op   = op;
+    inst.type = dst_type;
+    inst.dst  = dst;
+    inst.src0 = src;
+    inst.src1 = (IrValue)~0u;
+    inst.imm  = 0;
+
+    irb_emit(b, inst);
+    return dst;
+}
+
 IrInstId irb_store(IrBuilder *b, IrValue addr, IrValue src) {
     IrInst inst;
     inst.op   = IR_OP_STORE;

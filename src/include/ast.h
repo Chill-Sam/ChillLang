@@ -1,5 +1,6 @@
 #pragma once
 #include "token.h"
+#include "type.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -21,6 +22,7 @@ typedef enum AstNodeKind {
     AST_CALL_EXPR,
     AST_MEMBER_EXPR,
     AST_ASSIGN_EXPR,
+    AST_CAST_EXPR,
 
     AST_IDENT_EXPR,
     AST_LITERAL_EXPR,
@@ -134,6 +136,11 @@ typedef struct AstAssignExpr {
     AstNode *rhs;
 } AstAssignExpr;
 
+typedef struct AstCastExpr {
+    AstNode *expr;
+    TypeId target;
+} AstCastExpr;
+
 typedef struct AstCallExpr {
     AstNode *callee; // IDENT_EXPR usually
     AstNodeList args;
@@ -154,6 +161,8 @@ typedef struct AstMemberExpr {
 
 struct AstNode {
     AstNodeKind kind;
+    TypeId type_id;
+
     union {
         AstTranslationUnit translation_unit;
         AstFuncDecl func_decl;
@@ -170,6 +179,7 @@ struct AstNode {
         AstCallExpr call_expr;
         AstMemberExpr member_expr;
         AstAssignExpr assign_expr;
+        AstCastExpr cast_expr;
 
         AstIdentExpr ident_expr;
         AstLiteralExpr literal_expr;

@@ -45,7 +45,7 @@ void parser_init(Parser *p, Lexer *lx) {
     p->cur      = lexer_next(lx);
 }
 
-static AstNode *new_node(AstNodeKind kind) {
+AstNode *new_node(AstNodeKind kind) {
     AstNode *n = malloc(sizeof *n);
     n->kind    = kind;
     return n;

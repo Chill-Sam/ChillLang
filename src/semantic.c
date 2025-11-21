@@ -1,7 +1,6 @@
-// TODO: Add return type checking
-
 #include "semantic.h"
 
+#include "parser.h"
 #include "symtab.h"
 #include "token.h"
 #include <stdio.h>
@@ -35,6 +34,17 @@ static void sema_fatal(const Token *where, const char *msg) {
         fprintf(stderr, "sema error: %s\n", msg);
     }
     exit(1);
+}
+
+static AstNode *sema_insert_cast(AstNode *expr, TypeId target) {
+    if (expr->type_id == target)
+        return expr;
+
+    AstNode *cast             = new_node(AST_CAST_EXPR);
+    cast->as.cast_expr.expr   = expr;
+    cast->as.cast_expr.target = target;
+    cast->type_id             = target;
+    return cast;
 }
 
 static void sema_init_builtin_types(Scope *global) {
@@ -136,6 +146,7 @@ static TypeId sema_expr_ident(Scope *scope, AstNode *expr) {
 
     switch (sym->kind) {
     case SYM_VAR:
+        expr->type_id = sym->as.var.type_id;
         return sym->as.var.type_id;
     case SYM_FUNC:
         // TODO: Maybe update to allow first-class functions
@@ -157,24 +168,33 @@ static TypeId sema_expr_literal(AstNode *expr) {
         IntLiteralInfo info = tok->lit.int_literal;
         switch (info.suffix) {
         case INT_SUFFIX_I8:
+            expr->type_id = TYPEID_I8;
             return TYPEID_I8;
         case INT_SUFFIX_I16:
+            expr->type_id = TYPEID_I16;
             return TYPEID_I16;
         case INT_SUFFIX_I32:
+            expr->type_id = TYPEID_I32;
             return TYPEID_I32;
         case INT_SUFFIX_I64:
+            expr->type_id = TYPEID_I64;
             return TYPEID_I64;
         case INT_SUFFIX_U8:
+            expr->type_id = TYPEID_U8;
             return TYPEID_U8;
         case INT_SUFFIX_U16:
+            expr->type_id = TYPEID_U16;
             return TYPEID_U16;
         case INT_SUFFIX_U32:
+            expr->type_id = TYPEID_U32;
             return TYPEID_U32;
         case INT_SUFFIX_U64:
+            expr->type_id = TYPEID_U64;
             return TYPEID_U64;
         case INT_SUFFIX_NONE:
         default:
             // Default integer type: i32
+            expr->type_id = TYPEID_I32;
             return TYPEID_I32;
         }
     }
@@ -183,22 +203,28 @@ static TypeId sema_expr_literal(AstNode *expr) {
         FloatLiteralInfo info = tok->lit.float_literal;
         switch (info.suffix) {
         case FLOAT_SUFFIX_F32:
+            expr->type_id = TYPEID_F32;
             return TYPEID_F32;
         case FLOAT_SUFFIX_F64:
+            expr->type_id = TYPEID_F64;
+
             return TYPEID_F64;
         case FLOAT_SUFFIX_NONE:
         default:
             // Default float type: f32
+            expr->type_id = TYPEID_F32;
             return TYPEID_F32;
         }
     }
 
     case TOK_CHAR_LITERAL:
         // NOTE: Reusing I32 for now
+        expr->type_id = TYPEID_I32;
         return TYPEID_I32;
 
     case TOK_STRING_LITERAL:
         // TODO: Provide proper pointer type
+        expr->type_id = TYPEID_VOID;
         return TYPEID_VOID;
 
     default:
@@ -227,7 +253,10 @@ static TypeId sema_expr_member(Scope *scope, AstNode *expr) {
         if (name_tok->length == field_tok->length &&
             memcmp(name_tok->lexeme, field_tok->lexeme, field_tok->length) ==
                 0) {
-            return sema_resolve_type_name(g_global_scope, field->as.field.type);
+            TypeId t =
+                sema_resolve_type_name(g_global_scope, field->as.field.type);
+            expr->type_id = t;
+            return t;
         }
     }
 
@@ -278,16 +307,16 @@ static TypeId sema_expr_assign(Scope *scope, AstNode *expr) {
 
     TypeId rhs_type = sema_expr(scope, assign->rhs);
 
-    // TODO: Allow type promotion
-    if (lhs_type != rhs_type) {
-        if (assign->lhs->kind == AST_MEMBER_EXPR) {
-            sema_fatal(&assign->lhs->as.member_expr.field,
-                       "type mismatch in member assignment");
-        } else {
-            sema_fatal(&assign->lhs->as.ident_expr.name,
-                       "type mismatch in assignment");
-        }
+    if (!type_can_implicitly_convert(rhs_type, lhs_type)) {
+        sema_fatal(&assign->rhs->as.ident_expr.name,
+                   "type mismatch in assignment");
     }
+
+    if (rhs_type != lhs_type) {
+        assign->rhs = sema_insert_cast(assign->rhs, lhs_type);
+    }
+
+    expr->type_id = lhs_type;
 
     return lhs_type;
 }
@@ -297,19 +326,30 @@ static TypeId sema_expr_bin(Scope *scope, AstNode *expr) {
     TypeId lhs_type = sema_expr(scope, bin->lhs);
     TypeId rhs_type = sema_expr(scope, bin->rhs);
 
-    // TODO: Allow type promotion
-    if (lhs_type != rhs_type) {
+    TypeId result   = type_binary_result(lhs_type, rhs_type);
+    if (result == TYPEID_INVALID) {
         sema_fatal(NULL, "type mismatch in binary expression");
     }
 
+    if (lhs_type != result) {
+        bin->lhs = sema_insert_cast(bin->lhs, result);
+    }
+
+    if (rhs_type != result) {
+        bin->rhs = sema_insert_cast(bin->rhs, result);
+    }
+
+    expr->type_id = result;
+
     // TODO: Handle comparison operators
-    return lhs_type;
+    return result;
 }
 
 static TypeId sema_expr_unary(Scope *scope, AstNode *expr) {
     AstUnaryExpr *unary = &expr->as.unary_expr;
     TypeId expr_type    = sema_expr(scope, unary->expr);
 
+    expr->type_id       = expr_type;
     // TODO: allows any numeric type, refine later
     return expr_type;
 }
@@ -342,17 +382,25 @@ static TypeId sema_expr_call(Scope *scope, AstNode *expr) {
         TypeId param_type = sema_resolve_type_name(
             g_global_scope, params->items[i]->as.param.type);
 
-        // TODO: Type promotion ?
-        if (arg_type != param_type) {
+        if (!type_can_implicitly_convert(arg_type, param_type)) {
             sema_fatal(name_tok, "type mismatch in argument");
+        }
+
+        if (arg_type != param_type) {
+            call->args.items[i] =
+                sema_insert_cast(call->args.items[i], param_type);
         }
     }
 
     if (!fn->as.func_decl.return_type) {
+        expr->type_id = TYPEID_VOID;
         return TYPEID_VOID;
     }
 
-    return sema_resolve_type_name(g_global_scope, fn->as.func_decl.return_type);
+    TypeId t =
+        sema_resolve_type_name(g_global_scope, fn->as.func_decl.return_type);
+    expr->type_id = t;
+    return t;
 }
 
 static TypeId sema_expr(Scope *scope, AstNode *expr) {
@@ -377,6 +425,11 @@ static TypeId sema_expr(Scope *scope, AstNode *expr) {
 
     case AST_CALL_EXPR:
         return sema_expr_call(scope, expr);
+
+    case AST_CAST_EXPR:
+        sema_expr(scope, expr->as.cast_expr.expr);
+        expr->type_id = expr->as.cast_expr.target;
+        return expr->type_id;
 
     default:
         sema_fatal(NULL, "internal error: unexpected expr node kind");
@@ -405,9 +458,13 @@ static void sema_stmt(Scope *scope, AstNode *stmt) {
         // Check if the variable is initialized
         if (var->init) {
             TypeId init_type = sema_expr(scope, var->init);
-            if (type_id != init_type) {
+            if (!type_can_implicitly_convert(init_type, type_id)) {
                 sema_fatal(&stmt->as.var_decl.name,
                            "type mismatch in variable initialization");
+            }
+
+            if (type_id != init_type) {
+                var->init = sema_insert_cast(var->init, type_id);
             }
         }
 
@@ -425,10 +482,15 @@ static void sema_stmt(Scope *scope, AstNode *stmt) {
     case AST_RETURN_STMT:
         if (stmt->as.return_stmt.expr) {
             TypeId t = sema_expr(scope, stmt->as.return_stmt.expr);
-            // TODO: Allow type promotion ?
-            if (ctx.return_type != t) {
+            if (!type_can_implicitly_convert(t, ctx.return_type)) {
                 sema_fatal(NULL, "mismatched types in return statement");
             }
+
+            if (ctx.return_type != t) {
+                stmt->as.return_stmt.expr = sema_insert_cast(
+                    stmt->as.return_stmt.expr, ctx.return_type);
+            }
+
             ctx.return_type = TYPEID_VOID;
         }
         break;

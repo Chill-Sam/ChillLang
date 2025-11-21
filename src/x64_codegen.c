@@ -333,6 +333,48 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         break;
     }
 
+    case IR_OP_ZEXT:
+    case IR_OP_SEXT:
+    case IR_OP_TRUNC: {
+        TypeId dst_t        = inst->type;
+        TypeId src_t        = fn->value_types[inst->src0];
+
+        int dst_sz          = cg_type_size(dst_t);
+        int src_sz          = cg_type_size(src_t);
+
+        int off_dst         = stack_offset_for_value(fl, inst->dst);
+        int off_src         = stack_offset_for_value(fl, inst->src0);
+
+        const char *dst_mem = cg_mem_prefix(dst_t);
+        const char *src_mem = cg_mem_prefix(src_t);
+
+        if (inst->op == IR_OP_TRUNC) {
+            const char *reg = cg_reg_for_type(src_t);
+            fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, src_mem, off_src);
+            fprintf(out, "    mov %s [rbp%+d], %s\n", dst_mem, off_dst, reg);
+            break;
+        }
+
+        if (src_sz != 1 && src_sz != 2 && src_sz != 4) {
+            fprintf(stderr,
+                    "codegen error: unsupported type size %d in ZEXT/SEXT \n",
+                    src_sz);
+            abort();
+        }
+
+        const char *cmd = src_sz == 4              ? "mov"
+                          : inst->op == IR_OP_ZEXT ? "movzx"
+                                                   : "movsx";
+        fprintf(out, "    %s eax, %s [rbp%+d]\n", cmd, src_mem, off_src);
+        if (src_sz == 4 && dst_sz == 8 && inst->op == IR_OP_SEXT) {
+            fprintf(out, "    cdqe\n");
+        }
+
+        const char *dst_reg = cg_reg_for_type(dst_t);
+        fprintf(out, "    mov %s [rbp%+d], %s\n", dst_mem, off_dst, dst_reg);
+        break;
+    }
+
     case IR_OP_MOV: {
         TypeId t        = inst->type;
         const char *reg = cg_reg_for_type(t);
@@ -359,9 +401,10 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         if (inst->dst != (IrValue)~0u) {
             TypeId t        = inst->type;
             const char *mem = cg_mem_prefix(t);
+            const char *reg = cg_reg_for_type(t);
 
             int off_dst     = stack_offset_for_value(fl, inst->dst);
-            fprintf(out, "    mov %s [rbp%+d], rax\n", mem, off_dst);
+            fprintf(out, "    mov %s [rbp%+d], %s\n", mem, off_dst, reg);
         }
 
         break;

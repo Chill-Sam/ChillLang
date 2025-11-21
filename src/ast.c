@@ -282,6 +282,15 @@ static void ast_dump_call_expr(AstNode *node, int indent) {
     dump_node_list("args", &node->as.call_expr.args, indent + 1);
 }
 
+static void ast_dump_cast_expr(AstNode *node, int indent) {
+    print_indent(indent);
+    fprintf(stdout, "CastExpr target = %d\n", node->as.cast_expr.target);
+
+    print_indent(indent + 1);
+    fputs("Expr:\n", stdout);
+    ast_dump_node(node->as.cast_expr.expr, indent + 2);
+}
+
 static void ast_dump_member_expr(AstNode *node, int indent) {
     print_indent(indent);
     fputs("MemberExpr field = ", stdout);
@@ -365,6 +374,10 @@ static void ast_dump_node(AstNode *node, int indent) {
 
     case AST_CALL_EXPR:
         ast_dump_call_expr(node, indent);
+        break;
+
+    case AST_CAST_EXPR:
+        ast_dump_cast_expr(node, indent);
         break;
 
     case AST_MEMBER_EXPR:

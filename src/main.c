@@ -137,6 +137,9 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "Semantic analysis finished\n");
     fprintf(stderr, "-------------------------\n");
+    fprintf(stderr, "Dumping AST: \n");
+    ast_dump(root);
+    fprintf(stderr, "\n-------------------------\n");
 
     // IR lowering
     IrModule *mod = lower_to_ir(root);

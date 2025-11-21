@@ -5,7 +5,7 @@
 
 struct AstNode;
 
-typedef uint16_t TypeId;
+typedef int16_t TypeId;
 
 typedef enum TypeKind {
     TYPE_VOID,
@@ -34,6 +34,7 @@ Type type_make_void(void);
 Type type_make_bool(void);
 Type type_make_struct(struct AstNode *struct_decl);
 
+extern TypeId TYPEID_INVALID;
 extern TypeId TYPEID_VOID;
 extern TypeId TYPEID_BOOL;
 extern TypeId TYPEID_I8;
@@ -52,3 +53,6 @@ bool type_is_signed(TypeId id);
 bool type_is_unsigned(TypeId id);
 bool type_is_float(TypeId id);
 uint16_t type_bit_width(TypeId id);
+bool type_same_signedness(TypeId a, TypeId b);
+TypeId type_binary_result(TypeId a, TypeId b);
+bool type_can_implicitly_convert(TypeId src, TypeId dst);

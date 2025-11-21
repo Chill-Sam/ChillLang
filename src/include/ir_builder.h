@@ -14,6 +14,7 @@ IrInstId irb_emit(IrBuilder *b, IrInst inst);
 IrValue irb_const_int(IrBuilder *b, TypeId type, int64_t imm);
 IrValue irb_binop(IrBuilder *b, IrOp op, TypeId type, IrValue lhs, IrValue rhs);
 IrValue irb_unop(IrBuilder *b, IrOp op, TypeId type, IrValue src);
+IrValue irb_unary_cast(IrBuilder *b, IrOp op, TypeId dst_type, IrValue src);
 IrValue irb_mov(IrBuilder *b, TypeId type, IrValue src);
 
 IrInstId irb_store(IrBuilder *b, IrValue addr, IrValue src);

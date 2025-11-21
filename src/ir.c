@@ -145,6 +145,13 @@ static const char *ir_op_name(IrOp op) {
     case IR_OP_BITNOT:
         return "BITNOT";
 
+    case IR_OP_ZEXT:
+        return "ZEXT";
+    case IR_OP_SEXT:
+        return "SEXT";
+    case IR_OP_TRUNC:
+        return "TRUNC";
+
     case IR_OP_MOV:
         return "MOV";
 
@@ -197,6 +204,12 @@ static void ir_dump_instr(const IrInst *in, FILE *out) {
     case IR_OP_BITNOT:
     case IR_OP_MOV:
         fprintf(out, " v%u", in->src0);
+        break;
+
+    case IR_OP_ZEXT:
+    case IR_OP_SEXT:
+    case IR_OP_TRUNC:
+        fprintf(out, " v%u as %d", in->src0, in->type);
         break;
 
     case IR_OP_LOAD:
