@@ -304,7 +304,8 @@ static AstNode *parse_primary(Parser *p) {
     }
 
     if (p->cur.kind == TOK_INT_LITERAL || p->cur.kind == TOK_FLOAT_LITERAL ||
-        p->cur.kind == TOK_STRING_LITERAL || p->cur.kind == TOK_CHAR_LITERAL) {
+        p->cur.kind == TOK_STRING_LITERAL || p->cur.kind == TOK_CHAR_LITERAL ||
+        p->cur.kind == TOK_KW_TRUE || p->cur.kind == TOK_KW_FALSE) {
         Token lit = p->cur;
         advance(p);
         return make_literal_node(lit);

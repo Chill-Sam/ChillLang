@@ -106,6 +106,8 @@ static int token_eq_str(const Token *tok, const char *s) {
 static TypeId lower_resolve_builtin_type(const Token *name_tok) {
     if (token_eq_str(name_tok, "void"))
         return TYPEID_VOID;
+    if (token_eq_str(name_tok, "bool"))
+        return TYPEID_BOOL;
     if (token_eq_str(name_tok, "i8"))
         return TYPEID_I8;
     if (token_eq_str(name_tok, "u8"))
@@ -209,48 +211,70 @@ static int64_t parse_int_literal(const Token *tok) {
 static IrValue lower_literal(IrBuilder *b, AstNode *expr, TypeId *out_type) {
     Token *tok = &expr->as.literal_expr.tok;
     // TODO: Allow other literal types
-    if (tok->kind != TOK_INT_LITERAL) {
-        fprintf(stderr,
-                "lowering error: only int literals supported in IR for now\n");
+    if (tok->kind != TOK_INT_LITERAL && tok->kind != TOK_KW_TRUE &&
+        tok->kind != TOK_KW_FALSE) {
+        fprintf(stderr, "lowering error: only int literals and bool literals "
+                        "supported in IR for now\n");
         abort();
     }
 
-    // Default to i32 for now
-    TypeId t = TYPEID_I32;
-    switch (tok->lit.int_literal.suffix) {
-    case INT_SUFFIX_I8:
-        t = TYPEID_I8;
-        break;
-    case INT_SUFFIX_I16:
-        t = TYPEID_I16;
-        break;
-    case INT_SUFFIX_I32:
-        t = TYPEID_I32;
-        break;
-    case INT_SUFFIX_I64:
-        t = TYPEID_I64;
-        break;
-    case INT_SUFFIX_U8:
-        t = TYPEID_U8;
-        break;
-    case INT_SUFFIX_U16:
-        t = TYPEID_U16;
-        break;
-    case INT_SUFFIX_U32:
-        t = TYPEID_U32;
-        break;
-    case INT_SUFFIX_U64:
-        t = TYPEID_U64;
-        break;
-    default:
-        break;
+    // Bool literal
+    if (tok->kind == TOK_KW_TRUE || tok->kind == TOK_KW_FALSE) {
+        IrValue dst = irb_new_value(b, TYPEID_BOOL);
+
+        IrInst inst;
+        inst.op   = IR_CONST_INT;
+        inst.type = TYPEID_BOOL;
+        inst.dst  = dst;
+        inst.imm  = tok->kind == TOK_KW_TRUE ? 1 : 0;
+        irb_emit(b, inst);
+
+        if (out_type)
+            *out_type = TYPEID_BOOL;
+        return dst;
     }
 
-    if (out_type)
-        *out_type = t;
+    // Int literal
+    if (tok->kind == TOK_INT_LITERAL) {
+        // Default to i32 for now
+        TypeId t = TYPEID_I32;
+        switch (tok->lit.int_literal.suffix) {
+        case INT_SUFFIX_I8:
+            t = TYPEID_I8;
+            break;
+        case INT_SUFFIX_I16:
+            t = TYPEID_I16;
+            break;
+        case INT_SUFFIX_I32:
+            t = TYPEID_I32;
+            break;
+        case INT_SUFFIX_I64:
+            t = TYPEID_I64;
+            break;
+        case INT_SUFFIX_U8:
+            t = TYPEID_U8;
+            break;
+        case INT_SUFFIX_U16:
+            t = TYPEID_U16;
+            break;
+        case INT_SUFFIX_U32:
+            t = TYPEID_U32;
+            break;
+        case INT_SUFFIX_U64:
+            t = TYPEID_U64;
+            break;
+        default:
+            break;
+        }
 
-    int64_t imm = parse_int_literal(tok);
-    return irb_const_int(b, t, imm);
+        if (out_type)
+            *out_type = t;
+
+        int64_t imm = parse_int_literal(tok);
+        return irb_const_int(b, t, imm);
+    }
+
+    return (IrValue)~0u; // unreachable
 }
 
 static IrValue lower_bin_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,

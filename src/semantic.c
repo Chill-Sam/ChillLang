@@ -217,6 +217,11 @@ static TypeId sema_expr_literal(AstNode *expr) {
         }
     }
 
+    case TOK_KW_TRUE:
+    case TOK_KW_FALSE:
+        expr->type_id = TYPEID_BOOL;
+        return TYPEID_BOOL;
+
     case TOK_CHAR_LITERAL:
         // NOTE: Reusing I32 for now
         expr->type_id = TYPEID_I32;

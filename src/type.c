@@ -134,6 +134,11 @@ bool type_is_unsigned(TypeId id) {
     return t->kind == TYPE_INT && t->is_unsigned;
 }
 
+bool type_is_bool(TypeId id) {
+    const Type *t = type_get(id);
+    return t->kind == TYPE_BOOL;
+}
+
 uint16_t type_bit_width(TypeId id) {
     const Type *t = type_get(id);
     return t->bit_width;
@@ -158,6 +163,9 @@ TypeId type_binary_result(TypeId a, TypeId b) {
 }
 
 bool type_can_implicitly_convert(TypeId src, TypeId dst) {
+    if (src == dst)
+        return true;
+
     if (!type_is_integer(src) || !type_is_integer(dst))
         return false;
 
