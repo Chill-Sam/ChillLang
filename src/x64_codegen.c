@@ -307,6 +307,61 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         break;
     }
 
+    case IR_OP_CMP_LT:
+    case IR_OP_CMP_LE:
+    case IR_OP_CMP_GT:
+    case IR_OP_CMP_GE:
+    case IR_OP_CMP_EQ:
+    case IR_OP_CMP_NE: {
+        TypeId t        = fn->value_types[inst->src0];
+        int sz          = cg_type_size(t);
+        const char *mem = cg_mem_prefix(t);
+
+        int off_dst     = stack_offset_for_value(fl, inst->dst);
+        int off_src0    = stack_offset_for_value(fl, inst->src0);
+        int off_src1    = stack_offset_for_value(fl, inst->src1);
+
+        const char *reg = cg_reg_for_type(t);
+
+        fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off_src0);
+        fprintf(out, "    cmp %s, %s [rbp%+d]\n", reg, mem, off_src1);
+
+        const Type *lt  = type_get(t);
+        int is_unsigned = lt->is_unsigned;
+
+        const char *cc  = NULL;
+        switch (inst->op) {
+        case IR_OP_CMP_EQ:
+            cc = "e"; // equal
+            break;
+        case IR_OP_CMP_NE:
+            cc = "ne"; // not equal
+            break;
+        case IR_OP_CMP_LT:
+            cc = is_unsigned ? "b" : "l"; // below / less
+            break;
+        case IR_OP_CMP_LE:
+            cc = is_unsigned ? "be" : "le"; // below or equal / less or equal
+            break;
+        case IR_OP_CMP_GT:
+            cc = is_unsigned ? "a" : "g"; // above / greater
+            break;
+        case IR_OP_CMP_GE:
+            cc = is_unsigned ? "ae" : "ge"; // above or equal / greater or equal
+            break;
+        default:
+            fprintf(stderr, "codegen: unexpected cmp op %d\n", inst->op);
+            abort();
+        }
+
+        // setcc writes a 0/1 byte into AL; bool is stored as 1 byte
+        const char *bool_mem = cg_mem_prefix(inst->type);
+        fprintf(out, "    set%s al\n", cc);
+        fprintf(out, "    mov %s [rbp%+d], al\n", bool_mem, off_dst);
+
+        break;
+    }
+
     case IR_OP_NEG:
     case IR_OP_BITNOT: {
         TypeId t        = inst->type;
