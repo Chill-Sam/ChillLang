@@ -164,13 +164,13 @@ TypeId type_binary_result(TypeId a, TypeId b, struct AstNode *expr) {
         expr->as.bin_expr.op == BIN_BIT_XOR ||
         expr->as.bin_expr.op == BIN_BIT_OR || expr->as.bin_expr.op == BIN_SHL ||
         expr->as.bin_expr.op == BIN_SHR) {
-        return type_binary_int_result(a, b);
+        return type_binary_int(a, b);
     }
 
     return TYPEID_INVALID; // unreachable
 }
 
-TypeId type_binary_int_result(TypeId a, TypeId b) {
+TypeId type_binary_int(TypeId a, TypeId b) {
     if (!type_is_integer(a) || !type_is_integer(b))
         return TYPEID_INVALID;
 
