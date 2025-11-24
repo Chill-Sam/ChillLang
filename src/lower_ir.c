@@ -328,6 +328,24 @@ static IrValue lower_bin_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
     case BIN_SHR:
         op = IR_OP_SHR;
         break;
+    case BIN_LT:
+        op = IR_OP_CMP_LT;
+        break;
+    case BIN_GT:
+        op = IR_OP_CMP_GT;
+        break;
+    case BIN_LE:
+        op = IR_OP_CMP_LE;
+        break;
+    case BIN_GE:
+        op = IR_OP_CMP_GE;
+        break;
+    case BIN_EQ:
+        op = IR_OP_CMP_EQ;
+        break;
+    case BIN_NE:
+        op = IR_OP_CMP_NE;
+        break;
     default:
         fprintf(stderr, "lowering error: unsupported binary operator\n");
         abort();
