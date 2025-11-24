@@ -291,7 +291,7 @@ static IrValue lower_bin_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
         abort();
     }
 
-    TypeId t = lt;
+    TypeId t = expr->type_id;
     if (out_type)
         *out_type = t;
 

@@ -56,4 +56,5 @@ bool type_is_bool(TypeId id);
 uint16_t type_bit_width(TypeId id);
 bool type_same_signedness(TypeId a, TypeId b);
 TypeId type_binary_result(TypeId a, TypeId b, struct AstNode *expr);
+TypeId type_binary_int_result(TypeId a, TypeId b);
 bool type_can_implicitly_convert(TypeId src, TypeId dst);

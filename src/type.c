@@ -164,19 +164,23 @@ TypeId type_binary_result(TypeId a, TypeId b, struct AstNode *expr) {
         expr->as.bin_expr.op == BIN_BIT_XOR ||
         expr->as.bin_expr.op == BIN_BIT_OR || expr->as.bin_expr.op == BIN_SHL ||
         expr->as.bin_expr.op == BIN_SHR) {
-        if (!type_is_integer(a) || !type_is_integer(b))
-            return TYPEID_INVALID;
-
-        if (!type_same_signedness(a, b))
-            return TYPEID_INVALID;
-
-        int wa = type_bit_width(a);
-        int wb = type_bit_width(b);
-
-        return (wa >= wb) ? a : b;
+        return type_binary_int_result(a, b);
     }
 
     return TYPEID_INVALID; // unreachable
+}
+
+TypeId type_binary_int_result(TypeId a, TypeId b) {
+    if (!type_is_integer(a) || !type_is_integer(b))
+        return TYPEID_INVALID;
+
+    if (!type_same_signedness(a, b))
+        return TYPEID_INVALID;
+
+    int wa = type_bit_width(a);
+    int wb = type_bit_width(b);
+
+    return (wa >= wb) ? a : b;
 }
 
 bool type_can_implicitly_convert(TypeId src, TypeId dst) {

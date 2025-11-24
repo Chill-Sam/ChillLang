@@ -336,17 +336,34 @@ static TypeId sema_expr_bin(Scope *scope, AstNode *expr) {
         sema_fatal(NULL, "type mismatch in binary expression");
     }
 
-    if (lhs_type != result) {
-        bin->lhs = sema_insert_cast(bin->lhs, result);
+    // Comparison operators
+    if (type_is_bool(result)) {
+        TypeId int_result = type_binary_int_result(lhs_type, rhs_type);
+        if (int_result == TYPEID_INVALID) {
+            sema_fatal(NULL, "type mismatch in comparison expression");
+        }
+
+        if (lhs_type != int_result) {
+            bin->lhs = sema_insert_cast(bin->lhs, result);
+        }
+
+        if (rhs_type != int_result) {
+            bin->rhs = sema_insert_cast(bin->rhs, result);
+        }
     }
 
-    if (rhs_type != result) {
-        bin->rhs = sema_insert_cast(bin->rhs, result);
+    // Arithmetic operators
+    if (type_is_integer(result)) {
+        if (lhs_type != result) {
+            bin->lhs = sema_insert_cast(bin->lhs, result);
+        }
+
+        if (rhs_type != result) {
+            bin->rhs = sema_insert_cast(bin->rhs, result);
+        }
     }
 
     expr->type_id = result;
-
-    // TODO: Handle comparison operators
     return result;
 }
 
