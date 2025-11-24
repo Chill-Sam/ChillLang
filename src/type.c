@@ -1,4 +1,5 @@
 #include "type.h"
+#include "ast.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -148,18 +149,34 @@ bool type_same_signedness(TypeId a, TypeId b) {
     return type_is_signed(a) == type_is_signed(b);
 }
 
-TypeId type_binary_result(TypeId a, TypeId b) {
-    if (!type_is_integer(a) || !type_is_integer(b))
-        return TYPEID_INVALID;
-
-    if (!type_same_signedness(a, b))
-        return TYPEID_INVALID;
-
-    int wa = type_bit_width(a);
-    int wb = type_bit_width(b);
-
+TypeId type_binary_result(TypeId a, TypeId b, struct AstNode *expr) {
     // TODO: Handle floats
-    return (wa >= wb) ? a : b;
+    if (expr->as.bin_expr.op == BIN_LT || expr->as.bin_expr.op == BIN_GT ||
+        expr->as.bin_expr.op == BIN_LE || expr->as.bin_expr.op == BIN_GE ||
+        expr->as.bin_expr.op == BIN_EQ || expr->as.bin_expr.op == BIN_NE) {
+        return TYPEID_BOOL;
+    }
+
+    if (expr->as.bin_expr.op == BIN_ADD || expr->as.bin_expr.op == BIN_SUB ||
+        expr->as.bin_expr.op == BIN_MUL || expr->as.bin_expr.op == BIN_DIV ||
+        expr->as.bin_expr.op == BIN_MOD ||
+        expr->as.bin_expr.op == BIN_BIT_AND ||
+        expr->as.bin_expr.op == BIN_BIT_XOR ||
+        expr->as.bin_expr.op == BIN_BIT_OR || expr->as.bin_expr.op == BIN_SHL ||
+        expr->as.bin_expr.op == BIN_SHR) {
+        if (!type_is_integer(a) || !type_is_integer(b))
+            return TYPEID_INVALID;
+
+        if (!type_same_signedness(a, b))
+            return TYPEID_INVALID;
+
+        int wa = type_bit_width(a);
+        int wb = type_bit_width(b);
+
+        return (wa >= wb) ? a : b;
+    }
+
+    return TYPEID_INVALID; // unreachable
 }
 
 bool type_can_implicitly_convert(TypeId src, TypeId dst) {

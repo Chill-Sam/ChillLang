@@ -331,7 +331,7 @@ static TypeId sema_expr_bin(Scope *scope, AstNode *expr) {
     TypeId lhs_type = sema_expr(scope, bin->lhs);
     TypeId rhs_type = sema_expr(scope, bin->rhs);
 
-    TypeId result   = type_binary_result(lhs_type, rhs_type);
+    TypeId result   = type_binary_result(lhs_type, rhs_type, expr);
     if (result == TYPEID_INVALID) {
         sema_fatal(NULL, "type mismatch in binary expression");
     }
