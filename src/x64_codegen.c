@@ -7,7 +7,10 @@ typedef struct FrameLayout {
     int *offsets;
 } FrameLayout;
 
-static const char *ARG_REGS[6] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+static const char *ARG_REGS_8[6] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+static const char *ARG_REGS_4[6] = {"edi", "esi", "edx", "ecx", "r8d", "r9d"};
+static const char *ARG_REGS_2[6] = {"di", "si", "dx", "cx", "r8w", "r9w"};
+static const char *ARG_REGS_1[6] = {"dil", "sil", "dl", "cl", "r8b", "r9b"};
 
 static int cg_type_size(TypeId tid) {
     const Type *t = type_get(tid);
@@ -43,6 +46,23 @@ static int cg_type_align(TypeId tid) {
     return 1;
 }
 
+static const char *cg_get_arg_reg(int arg_count, TypeId type) {
+    int sz = cg_type_size(type);
+    switch (sz) {
+    case 1:
+        return ARG_REGS_1[arg_count];
+    case 2:
+        return ARG_REGS_2[arg_count];
+    case 4:
+        return ARG_REGS_4[arg_count];
+    case 8:
+        return ARG_REGS_8[arg_count];
+    default:
+        fprintf(stderr, "codegen: unsupported type size %d\n", sz);
+        abort();
+    }
+}
+
 static int align_up(int x, int align) { return (x + align - 1) & ~(align - 1); }
 
 static FrameLayout cg_build_frame(const IrFunc *fn) {
@@ -67,10 +87,8 @@ static FrameLayout cg_build_frame(const IrFunc *fn) {
 
     int frame = cur;
 
-    // On entry: rsp%16 == 8, after push rbp: 0, after sub: want 8
-    if ((frame % 16) == 0) {
-        frame += 8;
-    }
+    // Make frame 16-byte aligned
+    frame         = align_up(frame, 16);
 
     fl.frame_size = frame;
     return fl;
@@ -447,8 +465,9 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         for (uint8_t i = 0; i < inst->call_arg_count; i++) {
             IrValue arg_v   = inst->call_args[i];
             int off         = stack_offset_for_value(fl, arg_v);
-            const char *reg = ARG_REGS[i];
-            fprintf(out, "    mov %s, QWORD PTR [rbp%+d]\n", reg, off);
+            const char *reg = cg_get_arg_reg(i, inst->type);
+            const char *mem = cg_mem_prefix(inst->type);
+            fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off);
         }
 
         fprintf(out, "    call %s\n", inst->call_name);
@@ -498,9 +517,10 @@ static void x64_emit_func(FILE *out, const IrFunc *fn) {
 
     for (uint32_t i = 0; i < fn->num_args; i++) {
         TypeId t        = fn->value_types[i];
-        const char *reg = ARG_REGS[i];
+        const char *reg = cg_get_arg_reg(i, t);
+        const char *mem = cg_mem_prefix(t);
         int off         = stack_offset_for_value(&fl, (IrValue)i);
-        fprintf(out, "    mov QWORD PTR [rbp%+d], %s\n", off, reg);
+        fprintf(out, "    mov %s [rbp%+d], %s\n", mem, off, reg);
     }
     fprintf(out, "\n");
 
