@@ -235,6 +235,26 @@ static void ast_dump_return_stmt(AstNode *node, int indent) {
     }
 }
 
+static void ast_dump_if_stmt(AstNode *node, int indent) {
+    print_indent(indent);
+    puts("IfStmt");
+    if (node->as.if_stmt.cond) {
+        print_indent(indent + 1);
+        fputs("Cond:\n", stdout);
+        ast_dump_node(node->as.if_stmt.cond, indent + 2);
+    }
+    if (node->as.if_stmt.then_block) {
+        print_indent(indent + 1);
+        fputs("Then:\n", stdout);
+        ast_dump_node(node->as.if_stmt.then_block, indent + 2);
+    }
+    if (node->as.if_stmt.else_block) {
+        print_indent(indent + 1);
+        fputs("Else:\n", stdout);
+        ast_dump_node(node->as.if_stmt.else_block, indent + 2);
+    }
+}
+
 static void ast_dump_expr_stmt(AstNode *node, int indent) {
     print_indent(indent);
     puts("ExprStmt");
@@ -362,6 +382,10 @@ static void ast_dump_node(AstNode *node, int indent) {
 
     case AST_ASSIGN_EXPR:
         ast_dump_assign_expr(node, indent);
+        break;
+
+    case AST_IF_STMT:
+        ast_dump_if_stmt(node, indent);
         break;
 
     case AST_BIN_EXPR:

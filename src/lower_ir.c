@@ -10,6 +10,11 @@ typedef struct LowerVar {
     char *name;
     TypeId type;
     IrValue value;
+
+    // SSA Tracking
+    IrValue *versions;
+    uint32_t version_count;
+    uint32_t version_cap;
 } LowerVar;
 
 typedef struct LowerScope {
@@ -67,6 +72,7 @@ static void lscope_free(LowerScope *s) {
         return;
     for (uint32_t i = 0; i < s->count; i++) {
         free(s->vars[i].name);
+        free(s->vars[i].versions);
     }
     free(s->vars);
     free(s);
@@ -80,9 +86,15 @@ static void lscope_add_var(LowerScope *s, const char *name, TypeId type,
             xrealloc(s->vars, new_cap * sizeof(LowerVar), "lscope_add_var");
         s->cap = new_cap;
     }
-    s->vars[s->count].name  = strdup(name);
-    s->vars[s->count].type  = type;
-    s->vars[s->count].value = value;
+    s->vars[s->count].name          = strdup(name);
+    s->vars[s->count].type          = type;
+    s->vars[s->count].value         = value;
+
+    s->vars[s->count].versions      = malloc(4 * sizeof(IrValue));
+    s->vars[s->count].version_count = 1;
+    s->vars[s->count].version_cap   = 4;
+    s->vars[s->count].versions[0]   = value;
+
     s->count++;
 }
 
@@ -295,7 +307,6 @@ static IrValue lower_bin_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
     if (out_type)
         *out_type = t;
 
-    // TODO: Handle all binary operators
     IrOp op;
     switch (bin->op) {
     case BIN_ADD:
@@ -455,9 +466,99 @@ static IrValue lower_assign_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
 
     lv->value = rhs;
 
+    if (lv->version_count >= lv->version_cap) {
+        lv->version_cap *= 2;
+        lv->versions = xrealloc(lv->versions, lv->version_cap * sizeof(IrValue),
+                                "lower_var_add_version");
+    }
+    lv->versions[lv->version_count++] = rhs;
+
     if (out_type)
         *out_type = lv->type;
     return lv->value;
+}
+
+static void lower_if_stmt(IrBuilder *b, LowerScope *scope, AstNode *expr) {
+    AstIfStmt *if_stmt = &expr->as.if_stmt;
+
+    TypeId cond_type;
+    IrValue cond = lower_expr(b, scope, if_stmt->cond, &cond_type);
+
+    int lbl_then = irb_new_label(b);
+    int lbl_end  = irb_new_label(b);
+
+    // Save current values
+    IrValue *saved_values = malloc(scope->count * sizeof(IrValue));
+    for (uint32_t i = 0; i < scope->count; i++) {
+        saved_values[i] = scope->vars[i].value;
+    }
+
+    int lbl_else = if_stmt->else_block ? irb_new_label(b) : lbl_end;
+
+    irb_brcond(b, cond, lbl_then);
+    irb_br(b, lbl_else);
+
+    // Then branch
+    irb_mark_label(b, lbl_then);
+    lower_stmt(b, scope, if_stmt->then_block);
+
+    IrValue *then_values = malloc(scope->count * sizeof(IrValue));
+    for (uint32_t i = 0; i < scope->count; i++) {
+        then_values[i] = scope->vars[i].value;
+    }
+    irb_br(b, lbl_end);
+
+    // Else branch
+    IrValue *else_values = malloc(scope->count * sizeof(IrValue));
+
+    if (if_stmt->else_block) {
+        irb_mark_label(b, lbl_else);
+
+        // Restore saved values
+        for (uint32_t i = 0; i < scope->count; i++) {
+            scope->vars[i].value = saved_values[i];
+        }
+
+        lower_stmt(b, scope, if_stmt->else_block);
+
+        for (uint32_t i = 0; i < scope->count; i++) {
+            else_values[i] = scope->vars[i].value;
+        }
+        irb_br(b, lbl_end);
+    } else {
+        // No else block - Use saved values as else values
+        for (uint32_t i = 0; i < scope->count; i++) {
+            else_values[i] = saved_values[i];
+        }
+    }
+
+    // Merge branches
+    irb_mark_label(b, lbl_end);
+
+    for (uint32_t i = 0; i < scope->count; i++) {
+        if (then_values[i] != else_values[i]) {
+            IrValue phi_vals[2] = {then_values[i], else_values[i]};
+            int phi_labels[2]   = {lbl_then, lbl_else};
+
+            IrValue phi_result =
+                irb_phi(b, scope->vars[i].type, 2, phi_vals, phi_labels);
+            scope->vars[i].value = phi_result;
+
+            if (scope->vars[i].version_count >= scope->vars[i].version_cap) {
+                scope->vars[i].version_cap *= 2;
+                scope->vars[i].versions =
+                    xrealloc(scope->vars[i].versions,
+                             scope->vars[i].version_cap * sizeof(IrValue),
+                             "lower_if_stmt phi");
+            }
+            scope->vars[i].versions[scope->vars[i].version_count++] =
+                phi_result;
+        }
+    }
+
+    free(saved_values);
+    free(then_values);
+    free(else_values);
 }
 
 static IrValue lower_cast_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
@@ -588,6 +689,10 @@ static void lower_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
     switch (stmt->kind) {
     case AST_VAR_DECL:
         lower_var_decl(b, scope, stmt);
+        break;
+
+    case AST_IF_STMT:
+        lower_if_stmt(b, scope, stmt);
         break;
 
     case AST_RETURN_STMT:

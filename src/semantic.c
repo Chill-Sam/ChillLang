@@ -497,6 +497,25 @@ static void sema_stmt(Scope *scope, AstNode *stmt) {
         break;
     }
 
+    case AST_IF_STMT: {
+        if (stmt->as.if_stmt.cond) {
+            TypeId cond_type = sema_expr(scope, stmt->as.if_stmt.cond);
+            if (!type_is_bool(cond_type)) {
+                sema_fatal(&stmt->as.if_stmt.cond->as.ident_expr.name,
+                           "condition in if statement must be a boolean");
+            }
+        }
+
+        if (stmt->as.if_stmt.then_block) {
+            sema_block(scope, stmt->as.if_stmt.then_block);
+        }
+
+        if (stmt->as.if_stmt.else_block) {
+            sema_block(scope, stmt->as.if_stmt.else_block);
+        }
+        break;
+    }
+
     case AST_EXPR_STMT: {
         if (stmt->as.expr_stmt.expr) {
             (void)sema_expr(scope, stmt->as.expr_stmt.expr);
@@ -516,8 +535,6 @@ static void sema_stmt(Scope *scope, AstNode *stmt) {
                 stmt->as.return_stmt.expr = sema_insert_cast(
                     stmt->as.return_stmt.expr, ctx.return_type);
             }
-
-            ctx.return_type = TYPEID_VOID;
         }
         break;
 

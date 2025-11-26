@@ -242,6 +242,27 @@ static int starts_var_decl(Parser *p) {
     return 0;
 }
 
+static AstNode *parse_if_stmt(Parser *p) {
+    expect(p, TOK_KW_IF, "expected 'if' keyword");
+    AstNode *cond       = parse_expr(p);
+    AstNode *then_block = parse_block(p);
+
+    AstNode *else_block = NULL;
+    if (match(p, TOK_KW_ELSE)) {
+        if (p->cur.kind == TOK_KW_IF) {
+            else_block = parse_if_stmt(p);
+        } else {
+            else_block = parse_block(p);
+        }
+    }
+
+    AstNode *if_stmt               = new_node(AST_IF_STMT);
+    if_stmt->as.if_stmt.cond       = cond;
+    if_stmt->as.if_stmt.then_block = then_block;
+    if_stmt->as.if_stmt.else_block = else_block;
+    return if_stmt;
+}
+
 static AstNode *parse_stmt(Parser *p) {
     if (p->cur.kind == TOK_KW_RETURN) {
         advance(p);
@@ -253,6 +274,10 @@ static AstNode *parse_stmt(Parser *p) {
         }
         expect(p, TOK_SEMI, "expected ';' after return statement");
         return ret;
+    }
+
+    if (p->cur.kind == TOK_KW_IF) {
+        return parse_if_stmt(p);
     }
 
     if (p->cur.kind == TOK_LBRACE) {
@@ -285,7 +310,7 @@ static AstNode *parse_stmt(Parser *p) {
         return var_decl;
     }
 
-    // TODO: Add if, else, while, for, etc.
+    // TODO: Add while, for, etc.
 
     AstNode *expr = parse_expr(p);
     expect(p, TOK_SEMI, "expected ';' after expression");

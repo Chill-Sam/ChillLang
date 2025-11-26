@@ -8,6 +8,7 @@ set(SOURCES
     semantic.c
     ir.c
     ir_builder.c
+    ir_phi.c
     lower_ir.c
     x64_codegen.c
 )

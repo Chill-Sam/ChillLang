@@ -1,4 +1,5 @@
 #include "ir.h"
+#include "ir_phi.h"
 #include "lexer.h"
 #include "lower_ir.h"
 #include "parser.h"
@@ -128,24 +129,32 @@ int main(int argc, char **argv) {
     parser_init(&p, lx);
     AstNode *root = parse_translation_unit(&p);
 
-    fprintf(stderr, "Dumping AST: \n");
+    fprintf(stdout, "Dumping AST: \n");
     ast_dump(root);
-    fprintf(stderr, "\n-------------------------\n");
+    fprintf(stdout, "-------------------------\n");
 
     // Semantic analysis
     sema_analyze(root);
 
-    fprintf(stderr, "Semantic analysis finished\n");
-    fprintf(stderr, "-------------------------\n");
-    fprintf(stderr, "Dumping AST: \n");
+    fprintf(stdout, "Semantic analysis finished\n");
+    fprintf(stdout, "-------------------------\n");
+    fprintf(stdout, "Dumping AST: \n");
     ast_dump(root);
-    fprintf(stderr, "\n-------------------------\n");
+    fprintf(stdout, "-------------------------\n");
+    fprintf(stdout, "IR Lowering: \n");
 
     // IR lowering
     IrModule *mod = lower_to_ir(root);
     ir_dump_module(mod, stdout);
 
-    fprintf(stderr, "\n-------------------------\n");
+    fprintf(stdout, "-------------------------\n");
+    fprintf(stdout, "Phi elimination pass\n");
+    for (uint32_t i = 0; i < mod->funcs_count; i++) {
+        IrFunc *fn = &mod->funcs[i];
+        phi_elimination_pass(fn);
+    }
+    ir_dump_module(mod, stdout);
+    fprintf(stdout, "-------------------------\n");
 
     // Code generation
     char asm_path[PATH_MAX];

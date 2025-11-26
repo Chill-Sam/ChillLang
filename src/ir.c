@@ -32,9 +32,9 @@ IrFunc ir_func_create(char *name, TypeId ret_type, uint32_t num_params) {
     fn.return_type = ret_type;
     fn.num_args    = num_params;
 
-    fn.insts       = NULL;
-    fn.insts_count = 0;
-    fn.insts_cap   = 0;
+    fn.entry       = NULL;
+    fn.blocks      = NULL;
+    fn.block_count = 0;
 
     fn.value_count = num_params;
     fn.value_types = NULL;
@@ -52,15 +52,35 @@ IrFunc ir_func_create(char *name, TypeId ret_type, uint32_t num_params) {
 void ir_func_free(IrFunc *fn) {
     if (!fn)
         return;
-    for (uint32_t i = 0; i < fn->insts_count; i++) {
-        IrInst *inst = &fn->insts[i];
-        if (inst->op == IR_OP_CALL && inst->call_name) {
-            free(inst->call_name);
-        }
-    }
-    free(fn->insts);
     free(fn->name);
     free(fn->value_types);
+    IrBlock *b = fn->entry;
+    while (b) {
+        IrBlock *next = b->next;
+
+        IrInst *inst  = b->first;
+        while (inst) {
+            IrInst *next_inst = inst->next;
+
+            if (inst->op == IR_OP_CALL && inst->call_name) {
+                free(inst->call_name);
+            }
+
+            if (inst->op == IR_OP_PHI) {
+                free(inst->phi.values);
+                free(inst->phi.labels);
+            }
+
+            free(inst);
+            inst = next_inst;
+        }
+
+        free(b->preds);
+        free(b->succs);
+        free(b);
+
+        b = next;
+    }
 }
 
 void ir_module_add_func(IrModule *m, IrFunc fn) {
@@ -73,17 +93,6 @@ void ir_module_add_func(IrModule *m, IrFunc fn) {
     m->funcs[m->funcs_count++] = fn;
 }
 
-IrInstId ir_func_add_inst(IrFunc *fn, IrInst inst) {
-    if (fn->insts_count == fn->insts_cap) {
-        uint32_t new_cap = fn->insts_cap ? fn->insts_cap * 2 : 4;
-        fn->insts =
-            xrealloc(fn->insts, new_cap * sizeof(IrInst), "ir_func_add_inst");
-        fn->insts_cap = new_cap;
-    }
-    fn->insts[fn->insts_count++] = inst;
-    return fn->insts_count - 1;
-}
-
 IrValue ir_func_new_value(IrFunc *fn, TypeId type) {
     IrValue v = fn->value_count;
     fn->value_count++;
@@ -93,6 +102,41 @@ IrValue ir_func_new_value(IrFunc *fn, TypeId type) {
     fn->value_types[v] = type;
 
     return (IrValue)v;
+}
+
+void add_block_to_func(IrFunc *fn, IrBlock *block) {
+    if (!fn->blocks) {
+        fn->blocks = block;
+    } else {
+        IrBlock *last = fn->blocks;
+        while (last->next)
+            last = last->next;
+        last->next = block;
+    }
+}
+
+IrBlock *ir_func_new_block(IrFunc *fn) {
+    IrBlock *block     = calloc(1, sizeof(IrBlock));
+    block->id          = fn->block_count++;
+    block->label_value = -1;
+    block->first       = NULL;
+    block->last        = NULL;
+    block->preds       = NULL;
+    block->succs       = NULL;
+    block->pred_count  = 0;
+    block->succ_count  = 0;
+    block->next        = NULL;
+
+    add_block_to_func(fn, block);
+    return block;
+}
+
+IrBlock *find_block_by_label(IrFunc *fn, int label) {
+    for (IrBlock *b = fn->entry; b; b = b->next) {
+        if (b->label_value == label)
+            return b;
+    }
+    return NULL;
 }
 
 // ------ Dumping ------
@@ -160,6 +204,15 @@ static const char *ir_op_name(IrOp op) {
     case IR_OP_STORE:
         return "STORE";
 
+    case IR_OP_LABEL:
+        return "LABEL";
+    case IR_OP_BR:
+        return "BR";
+    case IR_OP_BRCOND:
+        return "BRCOND";
+    case IR_OP_PHI:
+        return "PHI";
+
     case IR_OP_CALL:
         return "CALL";
     case IR_OP_RET:
@@ -217,7 +270,24 @@ static void ir_dump_instr(const IrInst *in, FILE *out) {
         break;
 
     case IR_OP_STORE:
-        fprintf(out, " [v%u] = v%u", in->dst, in->src0);
+        fprintf(out, " v%u", in->src0);
+        break;
+
+    case IR_OP_LABEL:
+    case IR_OP_BR:
+        fprintf(out, " %ld", in->imm);
+        break;
+
+    case IR_OP_BRCOND:
+        fprintf(out, " v%u, %ld", in->src0, in->imm);
+        break;
+
+    case IR_OP_PHI:
+        for (uint8_t i = 0; i < in->phi.count; i++) {
+            if (i > 0)
+                fprintf(out, ",");
+            fprintf(out, " [v%u, L%d]", in->phi.values[i], in->phi.labels[i]);
+        }
         break;
 
     case IR_OP_CALL:
@@ -240,6 +310,9 @@ static void ir_dump_instr(const IrInst *in, FILE *out) {
         break;
     }
 
+    if (in->type != TYPEID_INVALID) {
+        fprintf(out, " type: %d", in->type);
+    }
     fputc('\n', out);
 }
 
@@ -248,9 +321,25 @@ void ir_dump_func(const IrFunc *fn, FILE *out) {
     fprintf(out, "params=%u", fn->num_args);
     fprintf(out, ") ret_type=%u\n", (unsigned)fn->return_type);
 
-    for (uint32_t i = 0; i < fn->insts_count; i++) {
-        fprintf(out, "%4u:", i);
-        ir_dump_instr(&fn->insts[i], out);
+    uint32_t j     = 0;
+    IrBlock *block = fn->entry;
+    for (uint32_t i = 0; i < fn->block_count; i++) {
+        if (!block->first) {
+            continue;
+        }
+        fprintf(out, "BLOCK %u:\n", block->id);
+        IrInst *cur_inst = block->first;
+        while (cur_inst != block->last) {
+            fprintf(out, "%4u:", j);
+            ir_dump_instr(cur_inst, out);
+            cur_inst = cur_inst->next;
+            j++;
+        }
+        fprintf(out, "%4u:", j);
+        ir_dump_instr(cur_inst, out);
+        j++;
+
+        block = block->next;
     }
     fputs("\n", out);
 }

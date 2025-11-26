@@ -461,6 +461,26 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         break;
     }
 
+    case IR_OP_LABEL:
+        fprintf(out, ".L%ld:\n", inst->imm);
+        break;
+
+    case IR_OP_BR:
+        fprintf(out, "    jmp .L%ld\n", inst->imm);
+        break;
+
+    case IR_OP_BRCOND: {
+        TypeId cond_t = fn->value_types[inst->src0];
+        IrValue cond  = inst->src0;
+        int off       = stack_offset_for_value(fl, cond);
+        fprintf(out, "    cmp %s [rbp%+d], 0\n", cg_mem_prefix(cond_t), off);
+        fprintf(out, "    jne .L%ld\n", inst->imm);
+        break;
+    }
+
+    case IR_OP_PHI:
+        break;
+
     case IR_OP_CALL: {
         for (uint8_t i = 0; i < inst->call_arg_count; i++) {
             IrValue arg_v   = inst->call_args[i];
@@ -502,8 +522,6 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
                 (int)inst->op);
         abort();
     }
-
-    fprintf(out, "\n");
 }
 
 static void x64_emit_func(FILE *out, const IrFunc *fn) {
@@ -522,11 +540,17 @@ static void x64_emit_func(FILE *out, const IrFunc *fn) {
         int off         = stack_offset_for_value(&fl, (IrValue)i);
         fprintf(out, "    mov %s [rbp%+d], %s\n", mem, off, reg);
     }
-    fprintf(out, "\n");
 
-    for (uint32_t i = 0; i < fn->insts_count; i++) {
-        const IrInst *inst = &fn->insts[i];
-        x64_emit_inst(out, fn, &fl, inst);
+    IrBlock *block = fn->entry;
+    for (uint32_t i = 0; i < fn->block_count; i++) {
+        IrInst *cur_inst = block->first;
+        while (cur_inst != block->last) {
+            x64_emit_inst(out, fn, &fl, cur_inst);
+            cur_inst = cur_inst->next;
+        }
+        x64_emit_inst(out, fn, &fl, cur_inst); // emit last instruction
+
+        block = block->next;
     }
 
     x64_emit_epilogue(out);

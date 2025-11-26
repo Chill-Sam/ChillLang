@@ -83,6 +83,12 @@ typedef struct AstVarDecl {
     AstNode *init; // NULL for no init
 } AstVarDecl;
 
+typedef struct AstIfStmt {
+    AstNode *cond;
+    AstNode *then_block;
+    AstNode *else_block;
+} AstIfStmt;
+
 typedef enum AstBinOp {
     BIN_ADD,
     BIN_SUB,
@@ -174,6 +180,7 @@ struct AstNode {
         AstReturnStmt return_stmt;
         AstExprStmt expr_stmt;
         AstVarDecl var_decl;
+        AstIfStmt if_stmt;
 
         AstBinExpr bin_expr;
         AstUnaryExpr unary_expr;

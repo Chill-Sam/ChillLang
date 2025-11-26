@@ -44,6 +44,11 @@ typedef enum IrOp {
     IR_OP_LOAD,  // dst = [addr]
     IR_OP_STORE, //[addr] = src0
 
+    IR_OP_LABEL,
+    IR_OP_BR,
+    IR_OP_BRCOND,
+    IR_OP_PHI, // dst = phi(src0, src1, ...)
+
     IR_OP_CALL, // dst = call func
     IR_OP_RET,  // ret src0
 } IrOp;
@@ -59,16 +64,44 @@ typedef struct IrInst {
     char *call_name;
     uint8_t call_arg_count;
     IrValue call_args[6];
+
+    struct {
+        IrValue *values;
+        int *labels;
+        uint32_t count;
+    } phi;
+
+    struct IrInst *next;
+    struct IrInst *prev;
+    struct IrBlock *block;
+
 } IrInst;
+
+typedef struct IrBlock {
+    int id;
+    int label_value;
+
+    IrInst *first;
+    IrInst *last;
+
+    struct IrBlock **preds;
+    uint32_t pred_count;
+    uint32_t pred_cap;
+    struct IrBlock **succs;
+    uint32_t succ_count;
+    uint32_t succ_cap;
+
+    struct IrBlock *next;
+} IrBlock;
 
 typedef struct IrFunc {
     char *name;
     TypeId return_type;
     uint32_t num_args;
 
-    IrInst *insts;
-    uint32_t insts_count;
-    uint32_t insts_cap;
+    IrBlock *entry;
+    IrBlock *blocks;
+    int block_count;
 
     uint32_t value_count; // number of virtual values used
     TypeId *value_types;
@@ -87,10 +120,10 @@ void free_ir_module(IrModule *m);
 IrFunc ir_func_create(char *name, TypeId ret_type, uint32_t num_params);
 void ir_func_free(IrFunc *fn);
 
-void ir_module_add_func(IrModule *m, IrFunc fn);
+IrBlock *ir_func_new_block(IrFunc *fn);
+IrBlock *find_block_by_label(IrFunc *fn, int label);
 
-// Instruction emission
-IrInstId ir_func_add_inst(IrFunc *fn, IrInst inst);
+void ir_module_add_func(IrModule *m, IrFunc fn);
 
 // Virtual value management
 IrValue ir_func_new_value(IrFunc *fn, TypeId type);
