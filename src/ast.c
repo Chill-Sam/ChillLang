@@ -255,6 +255,21 @@ static void ast_dump_if_stmt(AstNode *node, int indent) {
     }
 }
 
+static void ast_dump_while_stmt(AstNode *node, int indent) {
+    print_indent(indent);
+    puts("WhileStmt");
+    if (node->as.while_stmt.cond) {
+        print_indent(indent + 1);
+        fputs("Cond:\n", stdout);
+        ast_dump_node(node->as.while_stmt.cond, indent + 2);
+    }
+    if (node->as.while_stmt.body) {
+        print_indent(indent + 1);
+        fputs("Body:\n", stdout);
+        ast_dump_node(node->as.while_stmt.body, indent + 2);
+    }
+}
+
 static void ast_dump_expr_stmt(AstNode *node, int indent) {
     print_indent(indent);
     puts("ExprStmt");
@@ -386,6 +401,10 @@ static void ast_dump_node(AstNode *node, int indent) {
 
     case AST_IF_STMT:
         ast_dump_if_stmt(node, indent);
+        break;
+
+    case AST_WHILE_STMT:
+        ast_dump_while_stmt(node, indent);
         break;
 
     case AST_BIN_EXPR:

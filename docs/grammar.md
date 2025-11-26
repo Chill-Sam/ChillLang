@@ -30,6 +30,8 @@
     | <mut_decl>   ;
     | <return_stmt> ;
     | <expr_stmt>  ;
+    | <assign_stmt> ;
+    | <if_stmt>    ;
     ;
 
 <const_decl>    ::= <type> <identifier> = <expression> ;
@@ -37,6 +39,8 @@
 <return_stmt>   ::= return <expression> ;
 <expr_stmt>     ::= <expression> ;
 <assign_stmt>   ::= <identifier> = <expression> ;
+<if_stmt>       ::= if ( <expression> ) <block> [ else <block> ] ;
+<while_stmt>    ::= while ( <expression> ) <block> ;
 
 # Expressions
 <expression>    ::= <assignment> ;

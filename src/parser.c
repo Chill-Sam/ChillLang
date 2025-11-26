@@ -263,6 +263,14 @@ static AstNode *parse_if_stmt(Parser *p) {
     return if_stmt;
 }
 
+static AstNode *parse_while_stmt(Parser *p) {
+    expect(p, TOK_KW_WHILE, "expected 'while' keyword");
+    AstNode *while_stmt            = new_node(AST_WHILE_STMT);
+    while_stmt->as.while_stmt.cond = parse_expr(p);
+    while_stmt->as.while_stmt.body = parse_block(p);
+    return while_stmt;
+}
+
 static AstNode *parse_stmt(Parser *p) {
     if (p->cur.kind == TOK_KW_RETURN) {
         advance(p);
@@ -278,6 +286,10 @@ static AstNode *parse_stmt(Parser *p) {
 
     if (p->cur.kind == TOK_KW_IF) {
         return parse_if_stmt(p);
+    }
+
+    if (p->cur.kind == TOK_KW_WHILE) {
+        return parse_while_stmt(p);
     }
 
     if (p->cur.kind == TOK_LBRACE) {

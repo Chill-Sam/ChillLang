@@ -130,10 +130,6 @@ int main(int argc, char **argv) {
     parser_init(&p, lx);
     AstNode *root = parse_translation_unit(&p);
 
-    fprintf(stdout, "Dumping AST: \n");
-    ast_dump(root);
-    fprintf(stdout, "-------------------------\n");
-
     // Semantic analysis
     sema_analyze(root);
 
@@ -160,6 +156,9 @@ int main(int argc, char **argv) {
 
     fprintf(stdout, "Redundant JMP elimination pass\n");
     redundant_br_elimination_pass(mod);
+
+    fprintf(stdout, "Prune unused labels pass\n");
+    prune_unused_labels(mod);
 
     fprintf(stdout, "-------------------------\n");
 

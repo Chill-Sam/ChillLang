@@ -516,6 +516,17 @@ static void sema_stmt(Scope *scope, AstNode *stmt) {
         break;
     }
 
+    case AST_WHILE_STMT: {
+        TypeId cond_type = sema_expr(scope, stmt->as.while_stmt.cond);
+        if (!type_is_bool(cond_type)) {
+            sema_fatal(&stmt->as.while_stmt.cond->as.ident_expr.name,
+                       "condition in while statement must be a boolean");
+        }
+
+        sema_block(scope, stmt->as.while_stmt.body);
+        break;
+    }
+
     case AST_EXPR_STMT: {
         if (stmt->as.expr_stmt.expr) {
             (void)sema_expr(scope, stmt->as.expr_stmt.expr);

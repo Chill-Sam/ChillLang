@@ -478,67 +478,28 @@ static IrValue lower_assign_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
     return lv->value;
 }
 
-static void lower_if_stmt(IrBuilder *b, LowerScope *scope, AstNode *expr) {
-    AstIfStmt *if_stmt = &expr->as.if_stmt;
-
-    TypeId cond_type;
-    IrValue cond = lower_expr(b, scope, if_stmt->cond, &cond_type);
-
-    int lbl_then = irb_new_label(b);
-    int lbl_end  = irb_new_label(b);
-
-    // Save current values
+static IrValue *save_variable_state(LowerScope *scope) {
     IrValue *saved_values = malloc(scope->count * sizeof(IrValue));
     for (uint32_t i = 0; i < scope->count; i++) {
         saved_values[i] = scope->vars[i].value;
     }
+    return saved_values;
+}
 
-    int lbl_else = if_stmt->else_block ? irb_new_label(b) : lbl_end;
-
-    irb_brcond(b, cond, lbl_then);
-    irb_br(b, lbl_else);
-
-    // Then branch
-    irb_mark_label(b, lbl_then);
-    lower_stmt(b, scope, if_stmt->then_block);
-
-    IrValue *then_values = malloc(scope->count * sizeof(IrValue));
+static IrValue *restore_variable_state(LowerScope *scope,
+                                       IrValue *saved_values) {
     for (uint32_t i = 0; i < scope->count; i++) {
-        then_values[i] = scope->vars[i].value;
+        scope->vars[i].value = saved_values[i];
     }
-    irb_br(b, lbl_end);
+    return saved_values;
+}
 
-    // Else branch
-    IrValue *else_values = malloc(scope->count * sizeof(IrValue));
-
-    if (if_stmt->else_block) {
-        irb_mark_label(b, lbl_else);
-
-        // Restore saved values
-        for (uint32_t i = 0; i < scope->count; i++) {
-            scope->vars[i].value = saved_values[i];
-        }
-
-        lower_stmt(b, scope, if_stmt->else_block);
-
-        for (uint32_t i = 0; i < scope->count; i++) {
-            else_values[i] = scope->vars[i].value;
-        }
-        irb_br(b, lbl_end);
-    } else {
-        // No else block - Use saved values as else values
-        for (uint32_t i = 0; i < scope->count; i++) {
-            else_values[i] = saved_values[i];
-        }
-    }
-
-    // Merge branches
-    irb_mark_label(b, lbl_end);
-
+static void insert_phi_node(IrBuilder *b, LowerScope *scope, IrValue *a_values,
+                            IrValue *b_values, int a_lbl, int b_lbl) {
     for (uint32_t i = 0; i < scope->count; i++) {
-        if (then_values[i] != else_values[i]) {
-            IrValue phi_vals[2] = {then_values[i], else_values[i]};
-            int phi_labels[2]   = {lbl_then, lbl_else};
+        if (a_values[i] != b_values[i]) {
+            IrValue phi_vals[2] = {a_values[i], b_values[i]};
+            int phi_labels[2]   = {a_lbl, b_lbl};
 
             IrValue phi_result =
                 irb_phi(b, scope->vars[i].type, 2, phi_vals, phi_labels);
@@ -549,16 +510,95 @@ static void lower_if_stmt(IrBuilder *b, LowerScope *scope, AstNode *expr) {
                 scope->vars[i].versions =
                     xrealloc(scope->vars[i].versions,
                              scope->vars[i].version_cap * sizeof(IrValue),
-                             "lower_if_stmt phi");
+                             "insert_phi_node");
             }
             scope->vars[i].versions[scope->vars[i].version_count++] =
                 phi_result;
         }
     }
+}
+
+static void lower_if_stmt(IrBuilder *b, LowerScope *scope, AstNode *expr) {
+    AstIfStmt *if_stmt = &expr->as.if_stmt;
+
+    TypeId cond_type;
+    IrValue cond = lower_expr(b, scope, if_stmt->cond, &cond_type);
+
+    int lbl_then = irb_new_label(b);
+    int lbl_end  = irb_new_label(b);
+
+    // Save current values
+    IrValue *saved_values = save_variable_state(scope);
+    int lbl_else          = irb_new_label(b);
+
+    irb_brcond(b, cond, lbl_then);
+    irb_br(b, lbl_else);
+
+    // Then branch
+    irb_mark_label(b, lbl_then);
+    lower_stmt(b, scope, if_stmt->then_block);
+
+    IrValue *then_values = save_variable_state(scope);
+    irb_br(b, lbl_end);
+
+    // Else branch
+    IrValue *else_values;
+
+    irb_mark_label(b, lbl_else);
+    if (if_stmt->else_block) {
+        // Restore saved values
+        restore_variable_state(scope, saved_values);
+
+        lower_stmt(b, scope, if_stmt->else_block);
+
+        else_values = save_variable_state(scope);
+        irb_br(b, lbl_end);
+    } else {
+        // No else block - Use saved values as else values
+        else_values = saved_values;
+        irb_br(b, lbl_end);
+    }
+
+    // Merge branches
+    irb_mark_label(b, lbl_end);
+
+    insert_phi_node(b, scope, then_values, else_values, lbl_then, lbl_else);
 
     free(saved_values);
     free(then_values);
-    free(else_values);
+    if (if_stmt->else_block)
+        free(else_values);
+}
+
+static void lower_while_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
+    AstWhileStmt *while_stmt = &stmt->as.while_stmt;
+
+    int lbl_start            = irb_new_label(b);
+    int lbl_body             = irb_new_label(b);
+    int lbl_end              = irb_new_label(b);
+
+    irb_mark_label(b, lbl_start);
+
+    IrValue *saved_values = save_variable_state(scope);
+
+    TypeId cond_type;
+    IrValue cond = lower_expr(b, scope, while_stmt->cond, &cond_type);
+
+    irb_brcond(b, cond, lbl_body);
+    irb_br(b, lbl_end);
+
+    irb_mark_label(b, lbl_body);
+    lower_block(b, scope, while_stmt->body);
+
+    IrValue *body_values = save_variable_state(scope);
+    irb_br(b, lbl_start);
+
+    irb_mark_label(b, lbl_end);
+
+    insert_phi_node(b, scope, saved_values, body_values, lbl_start, lbl_body);
+
+    free(saved_values);
+    free(body_values);
 }
 
 static IrValue lower_cast_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
@@ -693,6 +733,10 @@ static void lower_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
 
     case AST_IF_STMT:
         lower_if_stmt(b, scope, stmt);
+        break;
+
+    case AST_WHILE_STMT:
+        lower_while_stmt(b, scope, stmt);
         break;
 
     case AST_RETURN_STMT:

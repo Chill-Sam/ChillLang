@@ -37,3 +37,28 @@ void redundant_br_elimination_pass(IrModule *m) {
         }
     }
 }
+
+// ----- Prune unused labels -----
+void prune_unused_labels(IrModule *m) {
+    // We check for each block b if it has a label; if it has only one
+    // predecessor; if the predecessor p has p->next == b (fall through case);
+    // we prune the label
+    for (uint32_t i = 0; i < m->funcs_count; i++) {
+        IrFunc *fn = &m->funcs[i];
+        for (IrBlock *b = fn->entry; b; b = b->next) {
+            IrInst *label = b->first;
+            if (label->op != IR_OP_LABEL)
+                continue;
+
+            if (b->pred_count != 1)
+                continue;
+
+            IrBlock *pred = b->preds[0];
+            if (pred->next != b)
+                continue;
+
+            b->first          = label->next;
+            label->next->prev = label->prev;
+        }
+    }
+}
