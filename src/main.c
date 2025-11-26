@@ -1,4 +1,5 @@
 #include "ir.h"
+#include "ir_opt.h"
 #include "ir_phi.h"
 #include "lexer.h"
 #include "lower_ir.h"
@@ -153,7 +154,17 @@ int main(int argc, char **argv) {
         IrFunc *fn = &mod->funcs[i];
         phi_elimination_pass(fn);
     }
+
+    fprintf(stdout, "Dead code elimination pass\n");
+    dead_code_elimination_pass(mod);
+
+    fprintf(stdout, "Redundant JMP elimination pass\n");
+    redundant_br_elimination_pass(mod);
+
+    fprintf(stdout, "-------------------------\n");
+
     ir_dump_module(mod, stdout);
+
     fprintf(stdout, "-------------------------\n");
 
     // Code generation

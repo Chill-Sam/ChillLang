@@ -9,6 +9,7 @@ set(SOURCES
     ir.c
     ir_builder.c
     ir_phi.c
+    ir_opt.c
     lower_ir.c
     x64_codegen.c
 )
