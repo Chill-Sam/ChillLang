@@ -588,6 +588,7 @@ static void sema_func(AstNode *fn) {
 
     sema_block(fn_scope, func->body);
 
+    ctx.return_type = TYPEID_VOID;
     scope_destroy(fn_scope);
     (void)return_type;
 }

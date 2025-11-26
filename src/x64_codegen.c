@@ -512,6 +512,7 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
 
             int off         = stack_offset_for_value(fl, inst->src0);
             fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off);
+            fprintf(out, "    jmp .L%s_exit\n", fn->name);
         }
 
         break;
@@ -553,6 +554,7 @@ static void x64_emit_func(FILE *out, const IrFunc *fn) {
         block = block->next;
     }
 
+    fprintf(out, ".L%s_exit:\n", fn->name);
     x64_emit_epilogue(out);
     cg_free_frame(&fl);
 }
