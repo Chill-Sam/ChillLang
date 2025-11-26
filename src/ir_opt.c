@@ -1,5 +1,4 @@
 #include "ir_opt.h"
-#include <stdlib.h>
 
 // ----- Dead code elimination -----
 void dead_code_elimination_pass(IrModule *m) {
