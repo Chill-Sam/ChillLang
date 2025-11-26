@@ -145,6 +145,9 @@ int main(int argc, char **argv) {
     ir_dump_module(mod, stdout);
 
     fprintf(stdout, "-------------------------\n");
+    fprintf(stdout, "CFG generation pass\n");
+    build_cfg_edges(mod);
+
     fprintf(stdout, "Phi elimination pass\n");
     for (uint32_t i = 0; i < mod->funcs_count; i++) {
         IrFunc *fn = &mod->funcs[i];

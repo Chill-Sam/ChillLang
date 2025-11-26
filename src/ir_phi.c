@@ -16,7 +16,7 @@ static void add_cfg_edge(IrBlock *from, IrBlock *to) {
     to->preds[to->pred_count++] = from;
 }
 
-static void build_cfg_edges(IrFunc *fn) {
+static void build_cfg_edges_for_func(IrFunc *fn) {
     for (IrBlock *b = fn->blocks; b; b = b->next) {
         b->pred_count = 0;
         b->succ_count = 0;
@@ -60,6 +60,13 @@ static void build_cfg_edges(IrFunc *fn) {
                 add_cfg_edge(b, b->next);
             }
         }
+    }
+}
+
+void build_cfg_edges(IrModule *m) {
+    for (uint32_t i = 0; i < m->funcs_count; i++) {
+        IrFunc *fn = &m->funcs[i];
+        build_cfg_edges_for_func(fn);
     }
 }
 
@@ -111,8 +118,6 @@ void remove_instruction(IrBlock *b, IrInst *inst) {
 }
 
 void phi_elimination_pass(IrFunc *fn) {
-    build_cfg_edges(fn);
-
     for (IrBlock *b = fn->entry; b; b = b->next) {
         for (int i = 0; i < b->succ_count; i++) {
             IrBlock *succ = b->succs[i];
