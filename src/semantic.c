@@ -511,7 +511,11 @@ static void sema_stmt(Scope *scope, AstNode *stmt) {
         }
 
         if (stmt->as.if_stmt.else_block) {
-            sema_block(scope, stmt->as.if_stmt.else_block);
+            if (stmt->as.if_stmt.else_block->kind == AST_BLOCK_STMT) {
+                sema_block(scope, stmt->as.if_stmt.else_block);
+            } else {
+                sema_stmt(scope, stmt->as.if_stmt.else_block);
+            }
         }
         break;
     }

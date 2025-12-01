@@ -41,6 +41,7 @@ typedef enum IrOp {
 
     IR_OP_MOV, // dst = src0
 
+    IR_OP_ALLOCA,
     IR_OP_LOAD,  // dst = [addr]
     IR_OP_STORE, //[addr] = src0
 
@@ -84,6 +85,7 @@ typedef struct IrBlock {
     IrInst *first;
     IrInst *last;
 
+    // CFG edges
     struct IrBlock **preds;
     uint32_t pred_count;
     uint32_t pred_cap;
@@ -91,6 +93,19 @@ typedef struct IrBlock {
     uint32_t succ_count;
     uint32_t succ_cap;
 
+    // Dominance info
+    bool visited; // DFS visited flag
+    int rpo_index;
+    struct IrBlock *idom;
+    struct IrBlock **dom_children;
+    uint32_t dom_children_count;
+    uint32_t dom_children_cap;
+
+    struct IrBlock **dom_frontier;
+    uint32_t dom_frontier_count;
+    uint32_t dom_frontier_cap;
+
+    // Linked list next
     struct IrBlock *next;
 } IrBlock;
 

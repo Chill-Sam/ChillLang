@@ -73,8 +73,30 @@ static FrameLayout cg_build_frame(const IrFunc *fn) {
         abort();
     }
 
+    for (uint32_t i = 0; i < fn->value_count; i++) {
+        fl.offsets[i] = 0;
+    }
+
     int cur = 0; // distance from rbp downwards (positive)
+
+    // Allocate for ALLOCAs
+    for (IrBlock *b = fn->entry; b; b = b->next) {
+        for (IrInst *inst = b->first; inst; inst = inst->next) {
+            if (inst->op != IR_OP_ALLOCA)
+                continue;
+
+            int sz  = cg_type_size(inst->type);
+            int aln = cg_type_align(inst->type);
+            cur     = align_up(cur, aln);
+            cur += sz;
+            fl.offsets[inst->dst] = -cur; // rbp-relative
+        }
+    }
+
     for (uint32_t v = 0; v < fn->value_count; v++) {
+        if (fl.offsets[v])
+            continue; // already allocated by ALLOCA
+
         TypeId tid =
             fn->value_types ? fn->value_types[v] : TYPEID_I64; // fallback
         int sz  = cg_type_size(tid);
@@ -85,12 +107,7 @@ static FrameLayout cg_build_frame(const IrFunc *fn) {
         fl.offsets[v] = -cur; // rbp-relative
     }
 
-    int frame = cur;
-
-    // Make frame 16-byte aligned
-    frame         = align_up(frame, 16);
-
-    fl.frame_size = frame;
+    fl.frame_size = align_up(cur, 16);
     return fl;
 }
 
@@ -448,6 +465,39 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         break;
     }
 
+    case IR_OP_ALLOCA:
+        // We don't need to do anything here
+        break;
+
+    case IR_OP_LOAD: {
+        IrValue src     = inst->src0;
+        int src_off     = stack_offset_for_value(fl, src);
+
+        const char *reg = cg_reg_for_type(inst->type);
+        const char *mem = cg_mem_prefix(inst->type);
+
+        int dst_off     = stack_offset_for_value(fl, inst->dst);
+
+        fprintf(out, "    lea rax, [rbp%+d]\n", src_off);
+        fprintf(out, "    mov %s, %s [rax]\n", reg, mem);
+        fprintf(out, "    mov %s [rbp%+d], %s\n", mem, dst_off, reg);
+        break;
+    }
+
+    case IR_OP_STORE: {
+        IrValue dst     = inst->dst;
+        int dst_off     = stack_offset_for_value(fl, dst);
+        int src_off     = stack_offset_for_value(fl, inst->src0);
+
+        const char *reg = cg_reg_for_type(inst->type);
+        const char *mem = cg_mem_prefix(inst->type);
+
+        fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, src_off);
+        fprintf(out, "    lea rax, [rbp%+d]\n", dst_off);
+        fprintf(out, "    mov %s [rax], %s\n", mem, reg);
+        break;
+    }
+
     case IR_OP_MOV: {
         TypeId t        = inst->type;
         const char *reg = cg_reg_for_type(t);
@@ -462,11 +512,11 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
     }
 
     case IR_OP_LABEL:
-        fprintf(out, ".L%ld:\n", inst->imm);
+        fprintf(out, ".L%s%ld:\n", fn->name, inst->imm);
         break;
 
     case IR_OP_BR:
-        fprintf(out, "    jmp .L%ld\n", inst->imm);
+        fprintf(out, "    jmp .L%s%ld\n", fn->name, inst->imm);
         break;
 
     case IR_OP_BRCOND: {
@@ -474,12 +524,13 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         IrValue cond  = inst->src0;
         int off       = stack_offset_for_value(fl, cond);
         fprintf(out, "    cmp %s [rbp%+d], 0\n", cg_mem_prefix(cond_t), off);
-        fprintf(out, "    jne .L%ld\n", inst->imm);
+        fprintf(out, "    jne .L%s%ld\n", fn->name, inst->imm);
         break;
     }
 
     case IR_OP_PHI:
-        break;
+        fprintf(stderr, "codegen error: unexpected IR_OP_PHI\n");
+        abort();
 
     case IR_OP_CALL: {
         for (uint8_t i = 0; i < inst->call_arg_count; i++) {

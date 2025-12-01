@@ -77,6 +77,8 @@ void ir_func_free(IrFunc *fn) {
 
         free(b->preds);
         free(b->succs);
+        free(b->dom_children);
+        free(b->dom_frontier);
         free(b);
 
         b = next;
@@ -121,11 +123,23 @@ IrBlock *ir_func_new_block(IrFunc *fn) {
     block->label_value = -1;
     block->first       = NULL;
     block->last        = NULL;
-    block->preds       = NULL;
-    block->succs       = NULL;
-    block->pred_count  = 0;
-    block->succ_count  = 0;
-    block->next        = NULL;
+
+    // CFG edges
+    block->preds      = NULL;
+    block->succs      = NULL;
+    block->pred_count = 0;
+    block->succ_count = 0;
+    block->next       = NULL;
+
+    // Dominance info
+    block->rpo_index          = -1;
+    block->idom               = NULL;
+    block->dom_children       = NULL;
+    block->dom_children_count = 0;
+    block->dom_children_cap   = 0;
+    block->dom_frontier       = NULL;
+    block->dom_frontier_count = 0;
+    block->dom_frontier_cap   = 0;
 
     add_block_to_func(fn, block);
     return block;
@@ -199,6 +213,8 @@ static const char *ir_op_name(IrOp op) {
     case IR_OP_MOV:
         return "MOV";
 
+    case IR_OP_ALLOCA:
+        return "ALLOCA";
     case IR_OP_LOAD:
         return "LOAD";
     case IR_OP_STORE:
@@ -265,6 +281,10 @@ static void ir_dump_instr(const IrInst *in, FILE *out) {
         fprintf(out, " v%u as %d", in->src0, in->type);
         break;
 
+    case IR_OP_ALLOCA:
+        fprintf(out, " as %d", in->type);
+        break;
+
     case IR_OP_LOAD:
         fprintf(out, " [v%u]", in->src0);
         break;
@@ -311,8 +331,9 @@ static void ir_dump_instr(const IrInst *in, FILE *out) {
     }
 
     if (in->type != TYPEID_INVALID) {
-        fprintf(out, " type: %d", in->type);
+        fprintf(out, " type: %d ", in->type);
     }
+
     fputc('\n', out);
 }
 
@@ -327,7 +348,57 @@ void ir_dump_func(const IrFunc *fn, FILE *out) {
         if (!block->first) {
             continue;
         }
-        fprintf(out, "BLOCK %u:\n", block->id);
+        fprintf(out, "BLOCK %u:", block->id);
+        if (block->label_value != -1) {
+            fprintf(out, " L%d,", block->label_value);
+        }
+
+        if (block->pred_count > 0) {
+            fprintf(out, " preds=");
+            for (uint32_t j = 0; j < block->pred_count; j++) {
+                if (j > 0)
+                    fprintf(out, ",");
+                fprintf(out, "%u", block->preds[j]->id);
+            }
+        }
+
+        if (block->succ_count > 0) {
+            fprintf(out, " succs=");
+            for (uint32_t j = 0; j < block->succ_count; j++) {
+                if (j > 0)
+                    fprintf(out, ",");
+                fprintf(out, "%u", block->succs[j]->id);
+            }
+        }
+
+        if (block->rpo_index != -1) {
+            fprintf(out, " rpo=%d", block->rpo_index);
+        }
+
+        if (block->idom) {
+            fprintf(out, " idom=%u", block->idom->id);
+        }
+
+        if (block->dom_children_count > 0) {
+            fprintf(out, " dom=");
+            for (uint32_t j = 0; j < block->dom_children_count; j++) {
+                if (j > 0)
+                    fprintf(out, ",");
+                fprintf(out, "%u", block->dom_children[j]->id);
+            }
+        }
+
+        if (block->dom_frontier_count > 0) {
+            fprintf(out, " frontier=");
+            for (uint32_t j = 0; j < block->dom_frontier_count; j++) {
+                if (j > 0)
+                    fprintf(out, ",");
+                fprintf(out, "%u", block->dom_frontier[j]->id);
+            }
+        }
+
+        fputc('\n', out);
+
         IrInst *cur_inst = block->first;
         while (cur_inst != block->last) {
             fprintf(out, "%4u:", j);

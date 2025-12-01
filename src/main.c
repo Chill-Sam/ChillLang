@@ -145,13 +145,28 @@ int main(int argc, char **argv) {
     ir_dump_module(mod, stdout);
 
     fprintf(stdout, "-------------------------\n");
-    fprintf(stdout, "CFG generation pass\n");
-    build_cfg_edges(mod);
-
-    fprintf(stdout, "Phi elimination pass\n");
+    // SSA Passes
+    fprintf(stdout, "SSA pass\n");
     for (uint32_t i = 0; i < mod->funcs_count; i++) {
         IrFunc *fn = &mod->funcs[i];
+        build_cfg_edges(fn);
+        IrRpo rpo = calculate_rpo(fn);
+        calculate_immediate_dominators(&rpo);
+        build_dom_tree(&rpo);
+        calculate_dominance_frontiers(&rpo);
+        VarAnalysis *analysis = analyze_variables(fn);
+        ir_dump_module(mod, stdout);
+        phi_generation_pass(fn, analysis);
+        ssa_renaming_pass(fn, analysis);
         phi_elimination_pass(fn);
+        dead_alloca_elimination_pass(fn);
+        free(rpo.blocks);
+        for (uint32_t i = 0; i < analysis->count; i++) {
+            VarInfo *var = &analysis->vars[i];
+            free(var->def_sites);
+        }
+        free(analysis->vars);
+        free(analysis);
     }
 
     fprintf(stdout, "Dead code elimination pass\n");
