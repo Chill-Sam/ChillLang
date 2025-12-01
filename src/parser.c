@@ -218,6 +218,10 @@ static AstNode *parse_block(Parser *p) {
 
     while (p->cur.kind != TOK_RBRACE && p->cur.kind != TOK_EOF) {
         AstNode *stmt = parse_stmt(p);
+        if (stmt->kind != AST_IF_STMT && stmt->kind != AST_WHILE_STMT &&
+            stmt->kind != AST_FOR_STMT) {
+            expect(p, TOK_SEMI, "expected ';' after statement");
+        }
         ast_list_push(&block->as.block_stmt.stmts, stmt);
     }
 
@@ -271,6 +275,23 @@ static AstNode *parse_while_stmt(Parser *p) {
     return while_stmt;
 }
 
+static AstNode *parse_for_stmt(Parser *p) {
+    expect(p, TOK_KW_FOR, "expected 'for' keyword");
+    expect(p, TOK_LPAREN, "expected '(' after 'for' keyword");
+
+    AstNode *for_stmt          = new_node(AST_FOR_STMT);
+    for_stmt->as.for_stmt.init = parse_stmt(p);
+    expect(p, TOK_SEMI, "expected ';' after for loop init");
+    for_stmt->as.for_stmt.cond = parse_expr(p);
+    expect(p, TOK_SEMI, "expected ';' after for loop cond");
+    for_stmt->as.for_stmt.post = parse_stmt(p);
+    expect(p, TOK_RPAREN, "expected ')' after for loop");
+
+    for_stmt->as.for_stmt.body = parse_block(p);
+
+    return for_stmt;
+}
+
 static AstNode *parse_stmt(Parser *p) {
     if (p->cur.kind == TOK_KW_RETURN) {
         advance(p);
@@ -280,7 +301,6 @@ static AstNode *parse_stmt(Parser *p) {
         } else {
             ret->as.return_stmt.expr = NULL;
         }
-        expect(p, TOK_SEMI, "expected ';' after return statement");
         return ret;
     }
 
@@ -290,6 +310,10 @@ static AstNode *parse_stmt(Parser *p) {
 
     if (p->cur.kind == TOK_KW_WHILE) {
         return parse_while_stmt(p);
+    }
+
+    if (p->cur.kind == TOK_KW_FOR) {
+        return parse_for_stmt(p);
     }
 
     if (p->cur.kind == TOK_LBRACE) {
@@ -312,8 +336,6 @@ static AstNode *parse_stmt(Parser *p) {
             init = parse_expr(p);
         }
 
-        expect(p, TOK_SEMI, "expected ';' after variable declaration");
-
         AstNode *var_decl            = new_node(AST_VAR_DECL);
         var_decl->as.var_decl.name   = name;
         var_decl->as.var_decl.type   = type;
@@ -324,8 +346,7 @@ static AstNode *parse_stmt(Parser *p) {
 
     // TODO: Add while, for, etc.
 
-    AstNode *expr = parse_expr(p);
-    expect(p, TOK_SEMI, "expected ';' after expression");
+    AstNode *expr           = parse_expr(p);
     AstNode *stmt           = new_node(AST_EXPR_STMT);
     stmt->as.expr_stmt.expr = expr;
     return stmt;

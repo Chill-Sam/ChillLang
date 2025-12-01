@@ -17,6 +17,7 @@ typedef enum AstNodeKind {
     AST_VAR_DECL,
     AST_IF_STMT,
     AST_WHILE_STMT,
+    AST_FOR_STMT,
 
     AST_BIN_EXPR,
     AST_UNARY_EXPR,
@@ -94,6 +95,13 @@ typedef struct AstWhileStmt {
     AstNode *cond;
     AstNode *body;
 } AstWhileStmt;
+
+typedef struct AstForStmt {
+    AstNode *init;
+    AstNode *cond;
+    AstNode *post;
+    AstNode *body;
+} AstForStmt;
 
 typedef enum AstBinOp {
     BIN_ADD,
@@ -188,6 +196,7 @@ struct AstNode {
         AstVarDecl var_decl;
         AstIfStmt if_stmt;
         AstWhileStmt while_stmt;
+        AstForStmt for_stmt;
 
         AstBinExpr bin_expr;
         AstUnaryExpr unary_expr;

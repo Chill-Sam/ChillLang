@@ -531,6 +531,17 @@ static void sema_stmt(Scope *scope, AstNode *stmt) {
         break;
     }
 
+    case AST_FOR_STMT:
+        sema_stmt(scope, stmt->as.for_stmt.init);
+        TypeId cond_type = sema_expr(scope, stmt->as.for_stmt.cond);
+        if (!type_is_bool(cond_type)) {
+            sema_fatal(&stmt->as.for_stmt.cond->as.ident_expr.name,
+                       "condition in for statement must be a boolean");
+        }
+        sema_stmt(scope, stmt->as.for_stmt.post);
+        sema_block(scope, stmt->as.for_stmt.body);
+        break;
+
     case AST_EXPR_STMT: {
         if (stmt->as.expr_stmt.expr) {
             (void)sema_expr(scope, stmt->as.expr_stmt.expr);

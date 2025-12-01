@@ -515,6 +515,30 @@ static void lower_while_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
     irb_mark_label(b, lbl_end);
 }
 
+static void lower_for_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
+    AstForStmt *for_stmt = &stmt->as.for_stmt;
+
+    int lbl_start        = irb_new_label(b);
+    int lbl_body         = irb_new_label(b);
+    int lbl_end          = irb_new_label(b);
+
+    lower_stmt(b, scope, for_stmt->init);
+
+    irb_mark_label(b, lbl_start);
+
+    TypeId cond_type;
+    IrValue cond = lower_expr(b, scope, for_stmt->cond, &cond_type);
+    irb_brcond(b, cond, lbl_body);
+    irb_br(b, lbl_end);
+
+    irb_mark_label(b, lbl_body);
+    lower_block(b, scope, for_stmt->body);
+    lower_stmt(b, scope, for_stmt->post);
+    irb_br(b, lbl_start);
+
+    irb_mark_label(b, lbl_end);
+}
+
 static IrValue lower_cast_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
                                TypeId *out_type) {
     AstCastExpr *cast = &expr->as.cast_expr;
@@ -649,6 +673,10 @@ static void lower_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
 
     case AST_WHILE_STMT:
         lower_while_stmt(b, scope, stmt);
+        break;
+
+    case AST_FOR_STMT:
+        lower_for_stmt(b, scope, stmt);
         break;
 
     case AST_RETURN_STMT:

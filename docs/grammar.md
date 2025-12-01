@@ -41,6 +41,7 @@
 <assign_stmt>   ::= <identifier> = <expression> ;
 <if_stmt>       ::= if ( <expression> ) <block> [ else <block> ] ;
 <while_stmt>    ::= while ( <expression> ) <block> ;
+<for_stmt>      ::= for ( <expression>; <expression>; <expression> ) <block> ;
 
 # Expressions
 <expression>    ::= <assignment> ;
