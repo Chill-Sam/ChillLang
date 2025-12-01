@@ -155,7 +155,6 @@ int main(int argc, char **argv) {
         build_dom_tree(&rpo);
         calculate_dominance_frontiers(&rpo);
         VarAnalysis *analysis = analyze_variables(fn);
-        ir_dump_module(mod, stdout);
         phi_generation_pass(fn, analysis);
         ssa_renaming_pass(fn, analysis);
         phi_elimination_pass(fn);
