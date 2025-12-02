@@ -499,6 +499,10 @@ static void lower_while_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
     int lbl_body             = irb_new_label(b);
     int lbl_end              = irb_new_label(b);
 
+    b->start_label_id        = lbl_start;
+    b->end_label_id          = lbl_end;
+
+    irb_br(b, lbl_start);
     irb_mark_label(b, lbl_start);
 
     TypeId cond_type;
@@ -513,6 +517,9 @@ static void lower_while_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
     irb_br(b, lbl_start);
 
     irb_mark_label(b, lbl_end);
+
+    b->start_label_id = -1;
+    b->end_label_id   = -1;
 }
 
 static void lower_for_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
@@ -521,9 +528,14 @@ static void lower_for_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
     int lbl_start        = irb_new_label(b);
     int lbl_body         = irb_new_label(b);
     int lbl_end          = irb_new_label(b);
+    int lbl_post         = irb_new_label(b);
+
+    b->start_label_id    = lbl_post;
+    b->end_label_id      = lbl_end;
 
     lower_stmt(b, scope, for_stmt->init);
 
+    irb_br(b, lbl_start);
     irb_mark_label(b, lbl_start);
 
     TypeId cond_type;
@@ -533,10 +545,16 @@ static void lower_for_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
 
     irb_mark_label(b, lbl_body);
     lower_block(b, scope, for_stmt->body);
+    irb_br(b, lbl_post);
+
+    irb_mark_label(b, lbl_post);
     lower_stmt(b, scope, for_stmt->post);
     irb_br(b, lbl_start);
 
     irb_mark_label(b, lbl_end);
+
+    b->start_label_id = -1;
+    b->end_label_id   = -1;
 }
 
 static IrValue lower_cast_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
@@ -677,6 +695,24 @@ static void lower_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
 
     case AST_FOR_STMT:
         lower_for_stmt(b, scope, stmt);
+        break;
+
+    case AST_BREAK_STMT:
+        if (b->end_label_id < 0) {
+            fprintf(stderr,
+                    "lowering error: break statement outside of loop\n");
+            abort();
+        }
+        irb_br(b, b->end_label_id);
+        break;
+
+    case AST_CONTINUE_STMT:
+        if (b->start_label_id < 0) {
+            fprintf(stderr,
+                    "lowering error: continue statement outside of loop\n");
+            abort();
+        }
+        irb_br(b, b->start_label_id);
         break;
 
     case AST_RETURN_STMT:

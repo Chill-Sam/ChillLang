@@ -9,6 +9,7 @@
 
 typedef struct Context {
     TypeId return_type;
+    bool in_loop;
 } Context;
 
 static Scope *g_global_scope = NULL;
@@ -526,8 +527,13 @@ static void sema_stmt(Scope *scope, AstNode *stmt) {
             sema_fatal(&stmt->as.while_stmt.cond->as.ident_expr.name,
                        "condition in while statement must be a boolean");
         }
-
-        sema_block(scope, stmt->as.while_stmt.body);
+        if (ctx.in_loop) {
+            sema_block(scope, stmt->as.while_stmt.body);
+        } else {
+            ctx.in_loop = true;
+            sema_block(scope, stmt->as.while_stmt.body);
+            ctx.in_loop = false;
+        }
         break;
     }
 
@@ -538,8 +544,28 @@ static void sema_stmt(Scope *scope, AstNode *stmt) {
             sema_fatal(&stmt->as.for_stmt.cond->as.ident_expr.name,
                        "condition in for statement must be a boolean");
         }
-        sema_stmt(scope, stmt->as.for_stmt.post);
-        sema_block(scope, stmt->as.for_stmt.body);
+
+        if (ctx.in_loop) {
+            sema_stmt(scope, stmt->as.for_stmt.post);
+            sema_block(scope, stmt->as.for_stmt.body);
+        } else {
+            ctx.in_loop = true;
+            sema_stmt(scope, stmt->as.for_stmt.post);
+            sema_block(scope, stmt->as.for_stmt.body);
+            ctx.in_loop = false;
+        }
+        break;
+
+    case AST_BREAK_STMT:
+        if (!ctx.in_loop) {
+            sema_fatal(NULL, "break statement outside of loop");
+        }
+        break;
+
+    case AST_CONTINUE_STMT:
+        if (!ctx.in_loop) {
+            sema_fatal(NULL, "continue statement outside of loop");
+        }
         break;
 
     case AST_EXPR_STMT: {

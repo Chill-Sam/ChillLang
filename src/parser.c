@@ -304,6 +304,16 @@ static AstNode *parse_stmt(Parser *p) {
         return ret;
     }
 
+    if (p->cur.kind == TOK_KW_BREAK) {
+        advance(p);
+        return new_node(AST_BREAK_STMT);
+    }
+
+    if (p->cur.kind == TOK_KW_CONTINUE) {
+        advance(p);
+        return new_node(AST_CONTINUE_STMT);
+    }
+
     if (p->cur.kind == TOK_KW_IF) {
         return parse_if_stmt(p);
     }

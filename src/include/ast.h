@@ -18,6 +18,8 @@ typedef enum AstNodeKind {
     AST_IF_STMT,
     AST_WHILE_STMT,
     AST_FOR_STMT,
+    AST_BREAK_STMT,
+    AST_CONTINUE_STMT,
 
     AST_BIN_EXPR,
     AST_UNARY_EXPR,

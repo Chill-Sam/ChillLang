@@ -145,6 +145,9 @@ int main(int argc, char **argv) {
     ir_dump_module(mod, stdout);
 
     fprintf(stdout, "-------------------------\n");
+    fprintf(stdout, "Dead code elimination pass\n");
+    dead_code_elimination_pass(mod);
+
     // SSA Passes
     fprintf(stdout, "SSA pass\n");
     for (uint32_t i = 0; i < mod->funcs_count; i++) {
@@ -167,9 +170,6 @@ int main(int argc, char **argv) {
         free(analysis->vars);
         free(analysis);
     }
-
-    fprintf(stdout, "Dead code elimination pass\n");
-    dead_code_elimination_pass(mod);
 
     fprintf(stdout, "Redundant JMP elimination pass\n");
     redundant_br_elimination_pass(mod);

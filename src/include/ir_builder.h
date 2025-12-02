@@ -6,6 +6,10 @@ typedef struct IrBuilder {
     IrFunc *func;
     IrBlock *block;
     int next_label_id;
+
+    // Break and continue labels
+    int start_label_id;
+    int end_label_id;
 } IrBuilder;
 
 void ir_builder_init(IrBuilder *b, IrFunc *fn);

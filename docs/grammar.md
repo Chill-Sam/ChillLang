@@ -11,7 +11,7 @@
 "(" ")" "{" "}" "+" "-" "*" "/" "%" "," ";" "=" "<" ">" "&" "|" "^" "~"
 
 ## keywords: 
-"fun" "return" "mut" "if" "else" "while" "for" "struct" "and" "or" "not" "as"
+"fun" "return" "mut" "if" "else" "while" "for" "struct" "and" "or" "not" "as" "break" "continue"
 
 # Top-level
 <program> ::= { <function_def> } ;
@@ -32,6 +32,10 @@
     | <expr_stmt>  ;
     | <assign_stmt> ;
     | <if_stmt>    ;
+    | <while_stmt> ;
+    | <for_stmt> ;
+    | <break_stmt> ;
+    | <continue_stmt> ;
     ;
 
 <const_decl>    ::= <type> <identifier> = <expression> ;
@@ -42,6 +46,8 @@
 <if_stmt>       ::= if ( <expression> ) <block> [ else <block> ] ;
 <while_stmt>    ::= while ( <expression> ) <block> ;
 <for_stmt>      ::= for ( <expression>; <expression>; <expression> ) <block> ;
+<break_stmt>    ::= break ;
+<continue_stmt> ::= continue ;
 
 # Expressions
 <expression>    ::= <assignment> ;

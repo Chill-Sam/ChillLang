@@ -115,11 +115,14 @@ typedef struct {
 } Keyword;
 
 static const Keyword keywords[] = {
-    {"if", TOK_KW_IF},     {"else", TOK_KW_ELSE},     {"while", TOK_KW_WHILE},
-    {"for", TOK_KW_FOR},   {"return", TOK_KW_RETURN}, {"struct", TOK_KW_STRUCT},
-    {"fun", TOK_KW_FUN},   {"mut", TOK_KW_MUT},       {"as", TOK_KW_AS},
-    {"and", TOK_KW_AND},   {"or", TOK_KW_OR},         {"not", TOK_KW_NOT},
-    {"true", TOK_KW_TRUE}, {"false", TOK_KW_FALSE}};
+    {"if", TOK_KW_IF},         {"else", TOK_KW_ELSE},
+    {"while", TOK_KW_WHILE},   {"for", TOK_KW_FOR},
+    {"return", TOK_KW_RETURN}, {"struct", TOK_KW_STRUCT},
+    {"fun", TOK_KW_FUN},       {"mut", TOK_KW_MUT},
+    {"as", TOK_KW_AS},         {"and", TOK_KW_AND},
+    {"or", TOK_KW_OR},         {"not", TOK_KW_NOT},
+    {"true", TOK_KW_TRUE},     {"false", TOK_KW_FALSE},
+    {"break", TOK_KW_BREAK},   {"continue", TOK_KW_CONTINUE}};
 
 static TokenKind lookup_keyword(const char *start, size_t len) {
     for (size_t i = 0; i < sizeof keywords / sizeof *keywords; i++) {

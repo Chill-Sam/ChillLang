@@ -55,6 +55,8 @@ typedef enum TokenKind {
     TOK_KW_NOT,
     TOK_KW_TRUE,
     TOK_KW_FALSE,
+    TOK_KW_BREAK,
+    TOK_KW_CONTINUE,
 
     // operators / punctuation
     TOK_PLUS,    // +

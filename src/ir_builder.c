@@ -14,12 +14,14 @@ static char *irb_strdup(const char *s) {
 }
 
 void ir_builder_init(IrBuilder *b, IrFunc *fn) {
-    b->func          = fn;
-    b->next_label_id = 0;
+    b->func           = fn;
+    b->next_label_id  = 0;
+    b->start_label_id = -1;
+    b->end_label_id   = -1;
 
-    b->block         = ir_func_new_block(fn);
-    fn->entry        = b->block;
-    fn->blocks       = b->block;
+    b->block          = ir_func_new_block(fn);
+    fn->entry         = b->block;
+    fn->blocks        = b->block;
 }
 
 IrValue irb_new_value(IrBuilder *b, TypeId type) {
