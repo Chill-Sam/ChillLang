@@ -1,4 +1,5 @@
 #include "ir_opt.h"
+#include <stdlib.h>
 
 // ----- Dead code elimination -----
 void dead_code_elimination_pass(IrModule *m) {
@@ -59,6 +60,8 @@ void prune_unused_labels(IrModule *m) {
 
             b->first          = label->next;
             label->next->prev = label->prev;
+
+            free(label);
         }
     }
 }
