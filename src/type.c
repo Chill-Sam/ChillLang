@@ -153,7 +153,8 @@ TypeId type_binary_result(TypeId a, TypeId b, struct AstNode *expr) {
     // TODO: Handle floats
     if (expr->as.bin_expr.op == BIN_LT || expr->as.bin_expr.op == BIN_GT ||
         expr->as.bin_expr.op == BIN_LE || expr->as.bin_expr.op == BIN_GE ||
-        expr->as.bin_expr.op == BIN_EQ || expr->as.bin_expr.op == BIN_NE) {
+        expr->as.bin_expr.op == BIN_EQ || expr->as.bin_expr.op == BIN_NE ||
+        expr->as.bin_expr.op == BIN_AND || expr->as.bin_expr.op == BIN_OR) {
         return TYPEID_BOOL;
     }
 

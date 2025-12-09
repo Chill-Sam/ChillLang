@@ -339,17 +339,25 @@ static TypeId sema_expr_bin(Scope *scope, AstNode *expr) {
 
     // Comparison operators
     if (type_is_bool(result)) {
-        TypeId int_result = type_binary_int(lhs_type, rhs_type);
-        if (int_result == TYPEID_INVALID) {
-            sema_fatal(NULL, "type mismatch in comparison expression");
-        }
+        // AND and OR
+        if (expr->as.bin_expr.op == BIN_AND || expr->as.bin_expr.op == BIN_OR) {
+            if (!type_is_bool(lhs_type) || !type_is_bool(rhs_type)) {
+                sema_fatal(NULL, "type mismatch in AND/OR expression");
+            }
+        } else {
 
-        if (lhs_type != int_result) {
-            bin->lhs = sema_insert_cast(bin->lhs, result);
-        }
+            TypeId int_result = type_binary_int(lhs_type, rhs_type);
+            if (int_result == TYPEID_INVALID) {
+                sema_fatal(NULL, "type mismatch in comparison expression");
+            }
 
-        if (rhs_type != int_result) {
-            bin->rhs = sema_insert_cast(bin->rhs, result);
+            if (lhs_type != int_result) {
+                bin->lhs = sema_insert_cast(bin->lhs, result);
+            }
+
+            if (rhs_type != int_result) {
+                bin->rhs = sema_insert_cast(bin->rhs, result);
+            }
         }
     }
 
