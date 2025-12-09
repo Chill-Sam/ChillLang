@@ -270,6 +270,31 @@ static void ast_dump_while_stmt(AstNode *node, int indent) {
     }
 }
 
+static void ast_dump_for_stmt(AstNode *node, int indent) {
+    print_indent(indent);
+    puts("ForStmt");
+    if (node->as.for_stmt.init) {
+        print_indent(indent + 1);
+        fputs("Init:\n", stdout);
+        ast_dump_node(node->as.for_stmt.init, indent + 2);
+    }
+    if (node->as.for_stmt.cond) {
+        print_indent(indent + 1);
+        fputs("Cond:\n", stdout);
+        ast_dump_node(node->as.for_stmt.cond, indent + 2);
+    }
+    if (node->as.for_stmt.post) {
+        print_indent(indent + 1);
+        fputs("Post:\n", stdout);
+        ast_dump_node(node->as.for_stmt.post, indent + 2);
+    }
+    if (node->as.for_stmt.body) {
+        print_indent(indent + 1);
+        fputs("Body:\n", stdout);
+        ast_dump_node(node->as.for_stmt.body, indent + 2);
+    }
+}
+
 static void ast_dump_expr_stmt(AstNode *node, int indent) {
     print_indent(indent);
     puts("ExprStmt");
@@ -405,6 +430,20 @@ static void ast_dump_node(AstNode *node, int indent) {
 
     case AST_WHILE_STMT:
         ast_dump_while_stmt(node, indent);
+        break;
+
+    case AST_FOR_STMT:
+        ast_dump_for_stmt(node, indent);
+        break;
+
+    case AST_BREAK_STMT:
+        print_indent(indent);
+        fputs("BreakStmt\n", stdout);
+        break;
+
+    case AST_CONTINUE_STMT:
+        print_indent(indent);
+        fputs("ContinueStmt\n", stdout);
         break;
 
     case AST_BIN_EXPR:
