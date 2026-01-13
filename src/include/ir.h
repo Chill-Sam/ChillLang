@@ -35,6 +35,9 @@ typedef enum IrOp {
     IR_OP_NOT,
     IR_OP_BITNOT,
 
+    IR_OP_LOGICAL_AND,
+    IR_OP_LOGICAL_OR,
+
     IR_OP_ZEXT,
     IR_OP_SEXT,
     IR_OP_TRUNC,

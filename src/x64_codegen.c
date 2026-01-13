@@ -423,6 +423,33 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         break;
     }
 
+    case IR_OP_LOGICAL_AND:
+    case IR_OP_LOGICAL_OR: {
+        TypeId t        = inst->type;
+        const char *reg = cg_reg_for_type(t);
+        const char *mem = cg_mem_prefix(t);
+
+        int off_dst     = stack_offset_for_value(fl, inst->dst);
+        int off0        = stack_offset_for_value(fl, inst->src0);
+        int off1        = stack_offset_for_value(fl, inst->src1);
+
+        fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off0);
+        switch (inst->op) {
+        case IR_OP_LOGICAL_AND:
+            fprintf(out, "    and %s, %s [rbp%+d]\n", reg, mem, off1);
+            break;
+        case IR_OP_LOGICAL_OR:
+            fprintf(out, "    or %s, %s [rbp%+d]\n", reg, mem, off1);
+            break;
+        default:
+            fprintf(stderr, "codegen error: unreachable code\n");
+            abort();
+        }
+
+        fprintf(out, "    mov %s [rbp%+d], %s\n", mem, off_dst, reg);
+        break;
+    }
+
     case IR_OP_ZEXT:
     case IR_OP_SEXT:
     case IR_OP_TRUNC: {

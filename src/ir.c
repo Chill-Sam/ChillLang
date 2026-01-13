@@ -203,6 +203,11 @@ static const char *ir_op_name(IrOp op) {
     case IR_OP_BITNOT:
         return "BITNOT";
 
+    case IR_OP_LOGICAL_AND:
+        return "LOGICAL_AND";
+    case IR_OP_LOGICAL_OR:
+        return "LOGICAL_OR";
+
     case IR_OP_ZEXT:
         return "ZEXT";
     case IR_OP_SEXT:
@@ -273,6 +278,11 @@ static void ir_dump_instr(const IrInst *in, FILE *out) {
     case IR_OP_BITNOT:
     case IR_OP_MOV:
         fprintf(out, " v%u", in->src0);
+        break;
+
+    case IR_OP_LOGICAL_AND:
+    case IR_OP_LOGICAL_OR:
+        fprintf(out, " v%u, v%u", in->src0, in->src1);
         break;
 
     case IR_OP_ZEXT:
