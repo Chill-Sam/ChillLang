@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 struct AstNode;
+struct AstNodeList;
 
 typedef int16_t TypeId;
 
@@ -58,3 +59,4 @@ bool type_same_signedness(TypeId a, TypeId b);
 TypeId type_binary_result(TypeId a, TypeId b, struct AstNode *expr);
 TypeId type_binary_int(TypeId a, TypeId b);
 bool type_can_implicitly_convert(TypeId src, TypeId dst);
+TypeId match_struct_type(struct AstNodeList *fields);

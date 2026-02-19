@@ -10,6 +10,7 @@ typedef enum AstNodeKind {
     AST_PARAM,
     AST_STRUCT_DECL,
     AST_FIELD,
+    AST_STRUCT_FIELD,
 
     AST_BLOCK_STMT,
     AST_RETURN_STMT,
@@ -29,6 +30,7 @@ typedef enum AstNodeKind {
     AST_CAST_EXPR,
 
     AST_IDENT_EXPR,
+    AST_STRUCT_EXPR,
     AST_LITERAL_EXPR,
 } AstNodeKind;
 
@@ -62,6 +64,11 @@ typedef struct AstField {
     // bool is_mut;
     Token name;
 } AstField;
+
+typedef struct AstStructField {
+    Token name;
+    AstNode *value;
+} AstStructField;
 
 typedef struct AstStructDecl {
     Token name;
@@ -173,6 +180,10 @@ typedef struct AstIdentExpr {
     Token name;
 } AstIdentExpr;
 
+typedef struct AstStructExpr {
+    AstNodeList fields; // AST_STRUCT_FIELD nodes
+} AstStructExpr;
+
 typedef struct AstLiteralExpr {
     Token tok; // int/float/string/char
 } AstLiteralExpr;
@@ -208,6 +219,8 @@ struct AstNode {
         AstCastExpr cast_expr;
 
         AstIdentExpr ident_expr;
+        AstStructExpr struct_expr;
+        AstStructField struct_field;
         AstLiteralExpr literal_expr;
     } as;
 };

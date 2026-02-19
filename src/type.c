@@ -2,6 +2,7 @@
 #include "ast.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define TYPE_TABLE_INITIAL_CAP 32
 
@@ -196,4 +197,47 @@ bool type_can_implicitly_convert(TypeId src, TypeId dst) {
 
     // TODO: Handle floats
     return type_bit_width(src) <= type_bit_width(dst);
+}
+
+TypeId match_struct_type(AstNodeList *fields) {
+    for (int i = 0; i < type_count; i++) {
+        Type *t = &type_table[i];
+
+        if (t->kind != TYPE_STRUCT) {
+            continue;
+        }
+
+        AstNode *struct_decl = t->struct_decl;
+        // TODO: Optimize struct checking from O(N^2)
+
+        bool full_match = true;
+        for (int j = 0; j < struct_decl->as.struct_decl.fields.count; j++) {
+            AstNode *def_field = struct_decl->as.struct_decl.fields.items[j];
+
+            bool found_match   = false;
+            for (int i = 0; i < fields->count; i++) {
+                AstNode *field = fields->items[i];
+
+                if (memcmp(field->as.struct_field.name.lexeme,
+                           def_field->as.field.name.lexeme,
+                           def_field->as.field.name.length) == 0) {
+                    found_match = true;
+                    break;
+                }
+            }
+
+            if (!found_match) {
+                full_match = false;
+                break;
+            }
+        }
+
+        if (!full_match) {
+            continue;
+        }
+
+        return i;
+    }
+
+    return -1;
 }

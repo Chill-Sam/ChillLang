@@ -369,6 +369,21 @@ static void ast_dump_ident_expr(AstNode *node, int indent) {
     fputc('\n', stdout);
 }
 
+static void ast_dump_struct_expr(AstNode *node, int indent) {
+    print_indent(indent);
+    fputs("StructLiteralExpr", stdout);
+    fputc('\n', stdout);
+    dump_node_list("fields", &node->as.struct_expr.fields, indent + 1);
+}
+
+static void ast_dump_struct_field(AstNode *node, int indent) {
+    print_indent(indent);
+    fputs("Field name = ", stdout);
+    print_token_lexeme(&node->as.struct_field.name);
+    fputc('\n', stdout);
+    ast_dump_node(node->as.struct_field.value, indent + 1);
+}
+
 static void ast_dump_literal_expr(AstNode *node, int indent) {
     print_indent(indent);
     fputs("LiteralExpr tok = '", stdout);
@@ -468,6 +483,14 @@ static void ast_dump_node(AstNode *node, int indent) {
 
     case AST_IDENT_EXPR:
         ast_dump_ident_expr(node, indent);
+        break;
+
+    case AST_STRUCT_EXPR:
+        ast_dump_struct_expr(node, indent);
+        break;
+
+    case AST_STRUCT_FIELD:
+        ast_dump_struct_field(node, indent);
         break;
 
     case AST_LITERAL_EXPR:

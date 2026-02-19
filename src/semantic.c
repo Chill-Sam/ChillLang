@@ -3,6 +3,7 @@
 #include "parser.h"
 #include "symtab.h"
 #include "token.h"
+#include "type.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +11,7 @@
 typedef struct Context {
     TypeId return_type;
     bool in_loop;
+    TypeId variable_decl_type;
 } Context;
 
 static Scope *g_global_scope = NULL;
@@ -159,6 +161,48 @@ static TypeId sema_expr_ident(Scope *scope, AstNode *expr) {
     }
     sema_fatal(name_token, "internal error: unknown symbol kind");
     return TYPEID_VOID; // unreachable
+}
+
+static TypeId sema_expr_struct(Scope *scope, AstNode *expr) {
+    AstStructExpr *struct_expr = &expr->as.struct_expr;
+    TypeId t_id                = match_struct_type(&struct_expr->fields);
+    if (t_id == TYPEID_INVALID) {
+        sema_fatal(&struct_expr->fields.items[0]->as.struct_field.name,
+                   "no matching struct declaration found");
+    }
+
+    const Type *type     = type_get(t_id);
+    AstNode *struct_decl = type->struct_decl;
+
+    for (int i = 0; i < struct_decl->as.struct_decl.fields.count; i++) {
+        AstNode *def_field = struct_decl->as.struct_decl.fields.items[i];
+
+        for (int i = 0; i < struct_expr->fields.count; i++) {
+            AstNode *field = struct_expr->fields.items[i];
+
+            if (memcmp(field->as.struct_field.name.lexeme,
+                       def_field->as.field.name.lexeme,
+                       def_field->as.field.name.length) == 0) {
+
+                TypeId val_type =
+                    sema_expr(scope, field->as.struct_field.value);
+
+                TypeId def_type = sema_resolve_type_name(
+                    g_global_scope, def_field->as.field.type);
+
+                if (!type_can_implicitly_convert(val_type, def_type)) {
+                    sema_fatal(&field->as.struct_field.name,
+                               "type mismatch in struct");
+                }
+
+                if (val_type != def_type) {
+                    field = sema_insert_cast(field, def_type);
+                }
+            }
+        }
+    }
+
+    return t_id;
 }
 
 // NOTE: Temporary implementation
@@ -438,6 +482,9 @@ static TypeId sema_expr(Scope *scope, AstNode *expr) {
     switch (expr->kind) {
     case AST_IDENT_EXPR:
         return sema_expr_ident(scope, expr);
+
+    case AST_STRUCT_EXPR:
+        return sema_expr_struct(scope, expr);
 
     case AST_LITERAL_EXPR:
         return sema_expr_literal(expr);

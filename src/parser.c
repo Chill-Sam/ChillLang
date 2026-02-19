@@ -385,6 +385,34 @@ static AstNode *parse_primary(Parser *p) {
         return inner;
     }
 
+    if (match(p, TOK_LBRACE)) {
+        AstNode *struct_expr = new_node(AST_STRUCT_EXPR);
+        ast_list_init(&struct_expr->as.struct_expr.fields);
+
+        if (p->cur.kind != TOK_RBRACE) {
+            for (;;) {
+                Token name = expect(p, TOK_IDENT, "expected field name");
+                expect(p, TOK_COLON, "expected ':' after field name");
+
+                AstNode *val                 = parse_expr(p);
+                AstNode *field               = new_node(AST_STRUCT_FIELD);
+                field->as.struct_field.name  = name;
+                field->as.struct_field.value = val;
+
+                ast_list_push(&struct_expr->as.struct_expr.fields, field);
+
+                if (!match(p, TOK_COMMA))
+                    break;
+
+                if (p->cur.kind == TOK_RBRACE)
+                    break;
+            }
+        }
+
+        expect(p, TOK_RBRACE, "expected '}' after struct body");
+        return struct_expr;
+    }
+
     // TODO: Hook into diagnostic system
     fprintf(stderr,
             "parse error at %u:%u: unexpected token in primary expression: "
