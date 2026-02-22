@@ -17,6 +17,8 @@ static int cg_type_size(TypeId tid) {
     switch (t->kind) {
     case TYPE_INT:
     case TYPE_FLOAT:
+    case TYPE_STRUCT:
+    case TYPE_PTR:
         return (int)(t->bit_width / 8); // assume 8,16,32,64 only
     case TYPE_BOOL:
         return 1;

@@ -135,10 +135,10 @@ IrValue irb_alloca(IrBuilder *b, TypeId type) {
     return dst;
 }
 
-void irb_store(IrBuilder *b, IrValue addr, IrValue src) {
+void irb_store(IrBuilder *b, TypeId type, IrValue addr, IrValue src) {
     IrInst inst;
     inst.op   = IR_OP_STORE;
-    inst.type = TYPEID_VOID;
+    inst.type = type;
     inst.dst  = addr;
     inst.src0 = src;
     inst.src1 = (IrValue)~0u;

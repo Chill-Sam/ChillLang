@@ -305,7 +305,7 @@ static void lower_struct_copy(IrBuilder *b, IrValue dst_ptr, IrValue src_ptr,
         }
 
         IrValue val = irb_load(b, TYPEID_I64, src_addr);
-        irb_store(b, dst_addr, val);
+        irb_store(b, TYPEID_I64, dst_addr, val);
 
         offset += 8;
         size -= 8;
@@ -318,7 +318,7 @@ static void lower_struct_copy(IrBuilder *b, IrValue dst_ptr, IrValue src_ptr,
         IrValue dst_addr = irb_binop(b, IR_OP_ADD, TYPEID_PTR, dst_ptr, off);
 
         IrValue val      = irb_load(b, TYPEID_I32, src_addr);
-        irb_store(b, dst_addr, val);
+        irb_store(b, TYPEID_I32, dst_addr, val);
 
         offset += 4;
         size -= 4;
@@ -331,7 +331,7 @@ static void lower_struct_copy(IrBuilder *b, IrValue dst_ptr, IrValue src_ptr,
         IrValue dst_addr = irb_binop(b, IR_OP_ADD, TYPEID_PTR, dst_ptr, off);
 
         IrValue val      = irb_load(b, TYPEID_I16, src_addr);
-        irb_store(b, dst_addr, val);
+        irb_store(b, TYPEID_I16, dst_addr, val);
 
         offset += 2;
         size -= 2;
@@ -344,7 +344,7 @@ static void lower_struct_copy(IrBuilder *b, IrValue dst_ptr, IrValue src_ptr,
         IrValue dst_addr = irb_binop(b, IR_OP_ADD, TYPEID_PTR, dst_ptr, off);
 
         IrValue val      = irb_load(b, TYPEID_I8, src_addr);
-        irb_store(b, dst_addr, val);
+        irb_store(b, TYPEID_I8, dst_addr, val);
     }
 }
 
@@ -396,7 +396,7 @@ static IrValue lower_struct_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
                     lower_struct_copy(b, field_addr, init_value, field_size);
                     printf("  -> struct copy\n");
                 } else {
-                    irb_store(b, field_addr, init_value);
+                    irb_store(b, init_t, field_addr, init_value);
                     printf("  -> store v%u to v%u\n", init_value, field_addr);
                 }
 
@@ -592,7 +592,7 @@ static IrValue lower_assign_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
         abort();
     }
 
-    irb_store(b, lv->value, rhs);
+    irb_store(b, rhs_t, lv->value, rhs);
 
     if (out_type)
         *out_type = lv->type;
@@ -798,7 +798,7 @@ static void lower_var_decl(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
             int size = type_bit_width(t) / 8;
             lower_struct_copy(b, v, init, size);
         } else {
-            irb_store(b, v, init);
+            irb_store(b, t, v, init);
         }
     }
 

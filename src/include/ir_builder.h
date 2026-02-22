@@ -24,7 +24,7 @@ IrValue irb_unary_cast(IrBuilder *b, IrOp op, TypeId dst_type, IrValue src);
 IrValue irb_mov(IrBuilder *b, TypeId type, IrValue src, IrValue dst);
 
 IrValue irb_alloca(IrBuilder *b, TypeId type);
-void irb_store(IrBuilder *b, IrValue addr, IrValue src);
+void irb_store(IrBuilder *b, TypeId type, IrValue addr, IrValue src);
 IrValue irb_load(IrBuilder *b, TypeId type, IrValue addr);
 
 void irb_ret_void(IrBuilder *b);
