@@ -1,5 +1,6 @@
 #pragma once
 
+#include "token.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -16,18 +17,28 @@ typedef enum TypeKind {
     TYPE_STRUCT,
 } TypeKind;
 
+typedef struct StructTypeInfo {
+    int *field_offsets;
+
+    bool size_calculated;
+    bool being_calculated;
+} StructTypeInfo;
+
 typedef struct Type {
     TypeKind kind;
 
     int bit_width;
+    int bit_alignment;
     int is_unsigned;
 
     struct AstNode *struct_decl;
+    StructTypeInfo struct_info;
 } Type;
 
 void types_init(void);
 TypeId type_add(Type t);
-const Type *type_get(TypeId id);
+Type *type_get(TypeId id);
+TypeId type_get_struct_by_name(const Token *name_tok);
 
 Type type_make_int(uint16_t bits, bool is_unsigned);
 Type type_make_float(uint16_t bits);

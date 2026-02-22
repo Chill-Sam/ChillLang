@@ -133,6 +133,101 @@ static void sema_pass1_collect_globals(AstNode *tu, Scope *global) {
 }
 
 // Second pass of semantic analysis
+int align_to(int offset, int alignment) {
+    if (alignment == 0)
+        return offset;
+    return (offset + alignment - 1) & ~(alignment - 1);
+}
+
+static void sema_calculate_struct_layout(AstNode *struct_decl) {
+    Token *name_tok = &struct_decl->as.struct_decl.name;
+    char *name      = token_to_cstr(name_tok);
+    Symbol *sym     = scope_lookup(g_global_scope, name);
+    TypeId tid      = sym->as.type.type_id;
+    Type *t         = type_get(tid);
+
+    if (t->struct_info.size_calculated) {
+        return;
+    }
+
+    if (t->struct_info.being_calculated) {
+        sema_fatal(name_tok, "circular struct dependency detected");
+    }
+    t->struct_info.being_calculated = true;
+
+    t->struct_info.field_offsets =
+        malloc(sizeof(int) * t->struct_decl->as.struct_decl.fields.count);
+
+    int current_offset   = 0;
+    int struct_alignment = 1;
+
+    for (int i = 0; i < t->struct_decl->as.struct_decl.fields.count; i++) {
+        AstNode *field_type =
+            t->struct_decl->as.struct_decl.fields.items[i]->as.field.type;
+        Token *field_type_name_tok = &field_type->as.ident_expr.name;
+        char *field_type_name      = token_to_cstr(field_type_name_tok);
+        Symbol *field_type_sym = scope_lookup(g_global_scope, field_type_name);
+        free(field_type_name);
+
+        TypeId field_tid = field_type_sym->as.type.type_id;
+        Type *field_t    = type_get(field_tid);
+
+        if (field_t->kind == TYPE_STRUCT) {
+            sema_calculate_struct_layout(field_t->struct_decl);
+        }
+
+        int field_size      = field_t->bit_width / 8;
+        int field_alignment = field_t->bit_alignment / 8;
+
+        if (field_size == -1 || field_alignment == -1) {
+            sema_fatal(field_type_name_tok,
+                       "invalid field_size or field_alignment");
+        }
+
+        if (field_alignment > struct_alignment) {
+            struct_alignment = field_alignment;
+        }
+
+        current_offset = align_to(current_offset, field_alignment);
+        t->struct_info.field_offsets[i] = current_offset;
+        current_offset += field_size;
+    }
+
+    t->bit_width     = align_to(current_offset, struct_alignment) * 8;
+    t->bit_alignment = struct_alignment * 8;
+    t->struct_info.size_calculated  = true;
+    t->struct_info.being_calculated = false;
+
+    printf("STRUCT INFO FOR %s\n", name);
+    free(name);
+    printf("Total size: %d bytes\n", t->bit_width / 8);
+    printf("Alignment:  %d bytes\n", t->bit_alignment / 8);
+    for (int i = 0; i < t->struct_decl->as.struct_decl.fields.count; i++) {
+        Token *field_name_tok =
+            &t->struct_decl->as.struct_decl.fields.items[i]->as.field.name;
+        char *field_name = token_to_cstr(field_name_tok);
+        printf("Field %s alignment: %d\n", field_name,
+               t->struct_info.field_offsets[i]);
+        free(field_name);
+    }
+    printf("-------------------------\n");
+}
+
+static void sema_pass2_calculate_struct_types(AstNode *tu) {
+    printf("Calculating struct types\n");
+    printf("-------------------------\n");
+
+    AstNodeList *items = &tu->as.translation_unit.items;
+
+    for (uint32_t i = 0; i < items->count; i++) {
+        AstNode *it = items->items[i];
+        if (it->kind == AST_STRUCT_DECL) {
+            sema_calculate_struct_layout(it);
+        }
+    }
+}
+
+// Third pass of semantic analysis
 static TypeId sema_expr(Scope *scope, AstNode *expr);
 static void sema_stmt(Scope *scope, AstNode *stmt);
 static void sema_block(Scope *parent_scope, AstNode *block);
@@ -700,7 +795,7 @@ static void sema_func(AstNode *fn) {
     (void)return_type;
 }
 
-static void sema_pass2_analyze_functions(AstNode *tu) {
+static void sema_pass3_analyze_functions(AstNode *tu) {
     AstNodeList *items = &tu->as.translation_unit.items;
 
     for (uint32_t i = 0; i < items->count; i++) {
@@ -716,6 +811,6 @@ void sema_analyze(AstNode *tu) {
     sema_init_builtin_types(g_global_scope);
 
     sema_pass1_collect_globals(tu, g_global_scope);
-    sema_pass2_analyze_functions(tu);
-    // TODO: Add pass 3
+    sema_pass2_calculate_struct_types(tu);
+    sema_pass3_analyze_functions(tu);
 }

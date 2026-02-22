@@ -39,37 +39,52 @@ static void type_table_reserve(uint16_t new_cap) {
 }
 
 Type type_make_void(void) {
-    return (Type){.kind        = TYPE_VOID,
-                  .bit_width   = 0,
-                  .is_unsigned = false,
-                  .struct_decl = NULL};
+    return (Type){.kind          = TYPE_VOID,
+                  .bit_width     = 0,
+                  .bit_alignment = 0,
+                  .is_unsigned   = false,
+                  .struct_info   = NULL,
+                  .struct_decl   = NULL};
 }
 
 Type type_make_bool(void) {
-    return (Type){.kind        = TYPE_BOOL,
-                  .bit_width   = 1,
-                  .is_unsigned = true,
-                  .struct_decl = NULL};
+    return (Type){.kind          = TYPE_BOOL,
+                  .bit_width     = 1,
+                  .bit_alignment = 1,
+                  .is_unsigned   = true,
+                  .struct_info   = NULL,
+                  .struct_decl   = NULL};
 }
 
 Type type_make_int(uint16_t bits, bool is_unsigned) {
-    return (Type){.kind        = TYPE_INT,
-                  .bit_width   = bits,
-                  .is_unsigned = is_unsigned,
-                  .struct_decl = NULL};
+    return (Type){.kind          = TYPE_INT,
+                  .bit_width     = bits,
+                  .bit_alignment = bits,
+                  .is_unsigned   = is_unsigned,
+                  .struct_info   = NULL,
+                  .struct_decl   = NULL};
 }
 
 Type type_make_float(uint16_t bits) {
-    return (Type){.kind        = TYPE_FLOAT,
-                  .bit_width   = bits,
-                  .is_unsigned = false,
-                  .struct_decl = NULL};
+    return (Type){.kind          = TYPE_FLOAT,
+                  .bit_width     = bits,
+                  .bit_alignment = bits,
+                  .is_unsigned   = false,
+                  .struct_info   = NULL,
+                  .struct_decl   = NULL};
 }
 
 Type type_make_struct(struct AstNode *struct_decl) {
-    return (Type){.kind        = TYPE_STRUCT,
-                  .bit_width   = 0,
-                  .is_unsigned = false,
+    return (Type){.kind          = TYPE_STRUCT,
+                  .bit_width     = -1,
+                  .bit_alignment = -1,
+                  .is_unsigned   = false,
+                  .struct_info =
+                      {
+                          .being_calculated = false,
+                          .size_calculated  = false,
+                          .field_offsets    = NULL,
+                      },
                   .struct_decl = struct_decl};
 }
 
@@ -91,12 +106,28 @@ TypeId type_add(Type t) {
     return id;
 }
 
-const Type *type_get(TypeId id) {
+Type *type_get(TypeId id) {
     if (id >= type_count) {
         fprintf(stderr, "fatal: invalid type id %u\n", id);
         abort();
     }
     return &type_table[id];
+}
+
+TypeId type_get_struct_by_name(const Token *name_tok) {
+    for (int i = 0; i < type_count; i++) {
+        Type *t = &type_table[i];
+        if (t->kind != TYPE_STRUCT) {
+            continue;
+        }
+
+        if (memcmp(name_tok->lexeme, t->struct_decl->as.struct_decl.name.lexeme,
+                   t->struct_decl->as.struct_decl.name.length) == 0) {
+            return i;
+        }
+    }
+
+    return TYPEID_INVALID;
 }
 
 void types_init(void) {
@@ -208,6 +239,11 @@ TypeId match_struct_type(AstNodeList *fields) {
         }
 
         AstNode *struct_decl = t->struct_decl;
+
+        if (struct_decl->as.struct_decl.fields.count != fields->count) {
+            continue;
+        }
+
         // TODO: Optimize struct checking from O(N^2)
 
         bool full_match = true;
