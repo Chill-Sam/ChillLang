@@ -143,8 +143,9 @@ static void sema_calculate_struct_layout(AstNode *struct_decl) {
     Token *name_tok = &struct_decl->as.struct_decl.name;
     char *name      = token_to_cstr(name_tok);
     Symbol *sym     = scope_lookup(g_global_scope, name);
-    TypeId tid      = sym->as.type.type_id;
-    Type *t         = type_get(tid);
+    free(name);
+    TypeId tid = sym->as.type.type_id;
+    Type *t    = type_get(tid);
 
     if (t->struct_info.size_calculated) {
         return;
@@ -198,8 +199,7 @@ static void sema_calculate_struct_layout(AstNode *struct_decl) {
     t->struct_info.size_calculated  = true;
     t->struct_info.being_calculated = false;
 
-    printf("STRUCT INFO FOR %s\n", name);
-    free(name);
+    printf("STRUCT INFO FOR %s\n", sym->name);
     printf("Total size: %d bytes\n", t->bit_width / 8);
     printf("Alignment:  %d bytes\n", t->bit_alignment / 8);
     for (int i = 0; i < t->struct_decl->as.struct_decl.fields.count; i++) {
