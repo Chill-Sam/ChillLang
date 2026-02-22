@@ -2,6 +2,7 @@
 #include "ast.h"
 #include "ir.h"
 #include "ir_builder.h"
+#include "type.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -105,7 +106,7 @@ static int token_eq_str(const Token *tok, const char *s) {
     return memcmp(tok->lexeme, s, len) == 0;
 }
 
-static TypeId lower_resolve_builtin_type(const Token *name_tok) {
+static TypeId lower_resolve_type(const Token *name_tok) {
     if (token_eq_str(name_tok, "void"))
         return TYPEID_VOID;
     if (token_eq_str(name_tok, "bool"))
@@ -127,9 +128,14 @@ static TypeId lower_resolve_builtin_type(const Token *name_tok) {
     if (token_eq_str(name_tok, "u64"))
         return TYPEID_U64;
 
-    fprintf(stderr, "lowering error: unsupported type '%.*s' for IR\n",
-            (int)name_tok->length, name_tok->lexeme);
-    abort();
+    TypeId struct_t = type_get_struct_by_name(name_tok);
+    if (struct_t == -1) {
+        fprintf(stderr, "lowering error: unsupported type '%.*s' for IR\n",
+                (int)name_tok->length, name_tok->lexeme);
+        abort();
+    }
+
+    return struct_t;
 }
 
 static AstNode *find_func_decl_by_name(const char *name) {
@@ -167,7 +173,7 @@ static TypeId get_func_ret_type(const char *name) {
     }
 
     Token *rtok = &fd->return_type->as.ident_expr.name;
-    return lower_resolve_builtin_type(rtok);
+    return lower_resolve_type(rtok);
 }
 
 static IrValue lower_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
@@ -279,6 +285,130 @@ static IrValue lower_literal(IrBuilder *b, AstNode *expr, TypeId *out_type) {
     }
 
     return (IrValue)~0u; // unreachable
+}
+
+static void lower_struct_copy(IrBuilder *b, IrValue dst_ptr, IrValue src_ptr,
+                              size_t size) {
+    size_t offset = 0;
+
+    // Copy 8 bytes at a time while possible
+    while (size >= 8) {
+        IrValue src_addr, dst_addr;
+
+        if (offset == 0) {
+            src_addr = src_ptr;
+            dst_addr = dst_ptr;
+        } else {
+            IrValue off = irb_const_int(b, TYPEID_PTR, offset);
+            src_addr    = irb_binop(b, IR_OP_ADD, TYPEID_PTR, src_ptr, off);
+            dst_addr    = irb_binop(b, IR_OP_ADD, TYPEID_PTR, dst_ptr, off);
+        }
+
+        IrValue val = irb_load(b, TYPEID_I64, src_addr);
+        irb_store(b, dst_addr, val);
+
+        offset += 8;
+        size -= 8;
+    }
+
+    // Copy 4 bytes if remaining
+    if (size >= 4) {
+        IrValue off      = irb_const_int(b, TYPEID_PTR, offset);
+        IrValue src_addr = irb_binop(b, IR_OP_ADD, TYPEID_PTR, src_ptr, off);
+        IrValue dst_addr = irb_binop(b, IR_OP_ADD, TYPEID_PTR, dst_ptr, off);
+
+        IrValue val      = irb_load(b, TYPEID_I32, src_addr);
+        irb_store(b, dst_addr, val);
+
+        offset += 4;
+        size -= 4;
+    }
+
+    // Copy 2 bytes if remaining
+    if (size >= 2) {
+        IrValue off      = irb_const_int(b, TYPEID_PTR, offset);
+        IrValue src_addr = irb_binop(b, IR_OP_ADD, TYPEID_PTR, src_ptr, off);
+        IrValue dst_addr = irb_binop(b, IR_OP_ADD, TYPEID_PTR, dst_ptr, off);
+
+        IrValue val      = irb_load(b, TYPEID_I16, src_addr);
+        irb_store(b, dst_addr, val);
+
+        offset += 2;
+        size -= 2;
+    }
+
+    // Copy 1 byte if remaining
+    if (size >= 1) {
+        IrValue off      = irb_const_int(b, TYPEID_PTR, offset);
+        IrValue src_addr = irb_binop(b, IR_OP_ADD, TYPEID_PTR, src_ptr, off);
+        IrValue dst_addr = irb_binop(b, IR_OP_ADD, TYPEID_PTR, dst_ptr, off);
+
+        IrValue val      = irb_load(b, TYPEID_I8, src_addr);
+        irb_store(b, dst_addr, val);
+    }
+}
+
+static IrValue lower_struct_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
+                                 TypeId *out_type) {
+    const Type *type           = type_get(expr->type_id);
+    AstStructDecl *struct_decl = &type->struct_decl->as.struct_decl;
+
+    if (!type->struct_info.size_calculated) {
+        fprintf(stderr, "lowering error: struct info not calculated\n");
+        abort();
+    }
+
+    IrValue struct_ptr = irb_alloca(b, expr->type_id);
+
+    for (int i = 0; i < struct_decl->fields.count; i++) {
+        AstNode *def_field = struct_decl->fields.items[i];
+
+        for (int j = 0; j < expr->as.struct_expr.fields.count; j++) {
+            AstNode *field = expr->as.struct_expr.fields.items[j];
+
+            if (memcmp(field->as.struct_field.name.lexeme,
+                       def_field->as.field.name.lexeme,
+                       def_field->as.field.name.length) == 0) {
+                printf("Processing field %u, offset %d\n", i,
+                       type->struct_info.field_offsets[i]);
+                AstNode *init_expr = field->as.struct_field.value;
+
+                TypeId init_t;
+                IrValue init_value = lower_expr(b, scope, init_expr, &init_t);
+
+                printf("  init_value = v%u, init_t = %d\n", init_value, init_t);
+
+                IrValue field_addr;
+                if (type->struct_info.field_offsets[i] == 0) {
+                    field_addr = struct_ptr;
+                    printf("  field_addr = struct_ptr (offset 0)\n");
+                } else {
+                    IrValue off = irb_const_int(
+                        b, TYPEID_PTR, type->struct_info.field_offsets[i]);
+                    field_addr =
+                        irb_binop(b, IR_OP_ADD, TYPEID_PTR, struct_ptr, off);
+                    printf("  field_addr = v%u (offset %d)\n", field_addr,
+                           type->struct_info.field_offsets[i]);
+                }
+
+                if (type_is_struct(init_t)) {
+                    int field_size = type_bit_width(init_t) / 8;
+                    lower_struct_copy(b, field_addr, init_value, field_size);
+                    printf("  -> struct copy\n");
+                } else {
+                    irb_store(b, field_addr, init_value);
+                    printf("  -> store v%u to v%u\n", init_value, field_addr);
+                }
+
+                break;
+            }
+        }
+    }
+
+    if (out_type)
+        *out_type = expr->type_id;
+
+    return struct_ptr;
 }
 
 static IrValue lower_bin_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
@@ -612,6 +742,9 @@ static IrValue lower_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
     case AST_LITERAL_EXPR:
         return lower_literal(b, expr, out_type);
 
+    case AST_STRUCT_EXPR:
+        return lower_struct_expr(b, scope, expr, out_type);
+
     case AST_BIN_EXPR:
         return lower_bin_expr(b, scope, expr, out_type);
 
@@ -647,7 +780,7 @@ static void lower_var_decl(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
     }
 
     Token *type_tok = &var->type->as.ident_expr.name;
-    TypeId type     = lower_resolve_builtin_type(type_tok);
+    TypeId type     = lower_resolve_type(type_tok);
     char *name      = token_to_cstr(&var->name);
 
     IrValue v       = irb_alloca(b, type);
@@ -661,7 +794,12 @@ static void lower_var_decl(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
             abort();
         }
 
-        irb_store(b, v, init);
+        if (type_is_struct(t)) {
+            int size = type_bit_width(t) / 8;
+            lower_struct_copy(b, v, init, size);
+        } else {
+            irb_store(b, v, init);
+        }
     }
 
     lscope_add_var(scope, name, type, v);
@@ -769,7 +907,7 @@ static IrFunc lower_func(AstNode *fn) {
         }
 
         Token *rtok = &fd->return_type->as.ident_expr.name;
-        ret_type    = lower_resolve_builtin_type(rtok);
+        ret_type    = lower_resolve_type(rtok);
     }
 
     char *name   = token_to_cstr(&fd->name);
@@ -789,7 +927,7 @@ static IrFunc lower_func(AstNode *fn) {
         }
 
         Token *type_tok = &param->type->as.ident_expr.name;
-        TypeId type     = lower_resolve_builtin_type(type_tok);
+        TypeId type     = lower_resolve_type(type_tok);
 
         char *pname     = token_to_cstr(&param->name);
 

@@ -182,6 +182,7 @@ typedef struct AstIdentExpr {
 
 typedef struct AstStructExpr {
     AstNodeList fields; // AST_STRUCT_FIELD nodes
+    AstNode *struct_decl;
 } AstStructExpr;
 
 typedef struct AstLiteralExpr {

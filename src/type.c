@@ -23,6 +23,7 @@ TypeId TYPEID_I64             = 0;
 TypeId TYPEID_U64             = 0;
 TypeId TYPEID_F32             = 0;
 TypeId TYPEID_F64             = 0;
+TypeId TYPEID_PTR             = 0;
 
 static void type_table_reserve(uint16_t new_cap) {
     if (new_cap <= type_capacity)
@@ -49,8 +50,8 @@ Type type_make_void(void) {
 
 Type type_make_bool(void) {
     return (Type){.kind          = TYPE_BOOL,
-                  .bit_width     = 1,
-                  .bit_alignment = 1,
+                  .bit_width     = 8,
+                  .bit_alignment = 8,
                   .is_unsigned   = true,
                   .struct_info   = NULL,
                   .struct_decl   = NULL};
@@ -69,6 +70,15 @@ Type type_make_float(uint16_t bits) {
     return (Type){.kind          = TYPE_FLOAT,
                   .bit_width     = bits,
                   .bit_alignment = bits,
+                  .is_unsigned   = false,
+                  .struct_info   = NULL,
+                  .struct_decl   = NULL};
+}
+
+Type type_make_ptr(void) {
+    return (Type){.kind          = TYPE_PTR,
+                  .bit_width     = 64,
+                  .bit_alignment = 64,
                   .is_unsigned   = false,
                   .struct_info   = NULL,
                   .struct_decl   = NULL};
@@ -145,6 +155,8 @@ void types_init(void) {
 
     TYPEID_F32  = type_add(type_make_float(32));
     TYPEID_F64  = type_add(type_make_float(64));
+
+    TYPEID_PTR  = type_add(type_make_ptr());
 }
 
 bool type_is_integer(TypeId id) {
@@ -170,6 +182,11 @@ bool type_is_unsigned(TypeId id) {
 bool type_is_bool(TypeId id) {
     const Type *t = type_get(id);
     return t->kind == TYPE_BOOL;
+}
+
+bool type_is_struct(TypeId id) {
+    const Type *t = type_get(id);
+    return t->kind == TYPE_STRUCT;
 }
 
 uint16_t type_bit_width(TypeId id) {

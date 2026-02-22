@@ -14,6 +14,7 @@ typedef enum TypeKind {
     TYPE_BOOL,
     TYPE_INT,
     TYPE_FLOAT,
+    TYPE_PTR,
     TYPE_STRUCT,
 } TypeKind;
 
@@ -59,12 +60,14 @@ extern TypeId TYPEID_I64;
 extern TypeId TYPEID_U64;
 extern TypeId TYPEID_F32;
 extern TypeId TYPEID_F64;
+extern TypeId TYPEID_PTR;
 
 bool type_is_integer(TypeId id);
 bool type_is_signed(TypeId id);
 bool type_is_unsigned(TypeId id);
 bool type_is_float(TypeId id);
 bool type_is_bool(TypeId id);
+bool type_is_struct(TypeId id);
 uint16_t type_bit_width(TypeId id);
 bool type_same_signedness(TypeId a, TypeId b);
 TypeId type_binary_result(TypeId a, TypeId b, struct AstNode *expr);

@@ -266,8 +266,11 @@ static TypeId sema_expr_struct(Scope *scope, AstNode *expr) {
                    "no matching struct declaration found");
     }
 
-    const Type *type     = type_get(t_id);
-    AstNode *struct_decl = type->struct_decl;
+    const Type *type         = type_get(t_id);
+    AstNode *struct_decl     = type->struct_decl;
+
+    expr->type_id            = t_id;
+    struct_expr->struct_decl = struct_decl;
 
     for (int i = 0; i < struct_decl->as.struct_decl.fields.count; i++) {
         AstNode *def_field = struct_decl->as.struct_decl.fields.items[i];
