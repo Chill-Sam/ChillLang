@@ -21,6 +21,11 @@ typedef struct LowerScope {
     uint32_t cap;
 } LowerScope;
 
+typedef enum ExprContext {
+    EXPR_RVALUE,
+    EXPR_LVALUE, // Need address
+} ExprContext;
+
 static void *xrealloc(void *ptr, size_t size, const char *where) {
     void *p = realloc(ptr, size);
     if (!p) {
@@ -177,13 +182,13 @@ static TypeId get_func_ret_type(const char *name) {
 }
 
 static IrValue lower_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
-                          TypeId *out_type);
+                          ExprContext ctx, TypeId *out_type);
 static void lower_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt);
 static void lower_block(IrBuilder *b, LowerScope *parent_scope, AstNode *block);
 static IrFunc lower_func(AstNode *fn);
 
 static IrValue lower_ident(IrBuilder *b, LowerScope *scope, AstNode *expr,
-                           TypeId *out_type) {
+                           ExprContext ctx, TypeId *out_type) {
     (void)b;
     Token *name_tok = &expr->as.ident_expr.name;
     char *name      = token_to_cstr(name_tok);
@@ -198,6 +203,11 @@ static IrValue lower_ident(IrBuilder *b, LowerScope *scope, AstNode *expr,
 
     if (out_type)
         *out_type = lv->type;
+
+    if (ctx == EXPR_LVALUE) {
+        return lv->value;
+    }
+
     return irb_load(b, lv->type, lv->value);
 }
 
@@ -374,7 +384,8 @@ static IrValue lower_struct_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
                 AstNode *init_expr = field->as.struct_field.value;
 
                 TypeId init_t;
-                IrValue init_value = lower_expr(b, scope, init_expr, &init_t);
+                IrValue init_value =
+                    lower_expr(b, scope, init_expr, EXPR_RVALUE, &init_t);
 
                 printf("  init_value = v%u, init_t = %d\n", init_value, init_t);
 
@@ -416,8 +427,8 @@ static IrValue lower_bin_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
     AstBinExpr *bin = &expr->as.bin_expr;
 
     TypeId lt, rt;
-    IrValue lhs = lower_expr(b, scope, bin->lhs, &lt);
-    IrValue rhs = lower_expr(b, scope, bin->rhs, &rt);
+    IrValue lhs = lower_expr(b, scope, bin->lhs, EXPR_RVALUE, &lt);
+    IrValue rhs = lower_expr(b, scope, bin->rhs, EXPR_RVALUE, &rt);
 
     if (lt != rt) {
         fprintf(stderr,
@@ -498,7 +509,7 @@ static IrValue lower_unary_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
     AstUnaryExpr *un = &expr->as.unary_expr;
 
     TypeId t;
-    IrValue src = lower_expr(b, scope, un->expr, &t);
+    IrValue src = lower_expr(b, scope, un->expr, EXPR_RVALUE, &t);
 
     TypeId t2   = t;
     if (out_type)
@@ -548,7 +559,8 @@ static IrValue lower_call_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
 
     for (uint32_t i = 0; i < args->count; i++) {
         TypeId arg_type;
-        IrValue arg_val       = lower_expr(b, scope, args->items[i], &arg_type);
+        IrValue arg_val =
+            lower_expr(b, scope, args->items[i], EXPR_RVALUE, &arg_type);
         arg_vals[arg_count++] = arg_val;
         (void)arg_type;
     }
@@ -567,35 +579,27 @@ static IrValue lower_assign_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
                                  TypeId *out_type) {
     AstAssignExpr *assign = &expr->as.assign_expr;
 
-    if (assign->lhs->kind != AST_IDENT_EXPR) {
-        fprintf(stderr, "lowering error: only assignment to variables "
-                        "supported in IR for now\n");
-        abort();
-    }
-
-    Token *name_tok = &assign->lhs->as.ident_expr.name;
-    char *name      = token_to_cstr(name_tok);
-    LowerVar *lv    = lscope_lookup(scope, name);
-    free(name);
-
-    if (!lv) {
-        fprintf(stderr, "lowering error: undefined variable '%.*s'\n",
-                (int)name_tok->length, name_tok->lexeme);
-        abort();
-    }
+    TypeId lhs_t;
+    IrValue lhs_addr = lower_expr(b, scope, assign->lhs, EXPR_LVALUE, &lhs_t);
 
     TypeId rhs_t;
-    IrValue rhs = lower_expr(b, scope, assign->rhs, &rhs_t);
+    IrValue rhs = lower_expr(b, scope, assign->rhs, EXPR_RVALUE, &rhs_t);
 
-    if (lv->type != rhs_t) {
+    if (lhs_t != rhs_t) {
         fprintf(stderr, "lowering error: mismatched types in assignment\n");
         abort();
     }
 
-    irb_store(b, rhs_t, lv->value, rhs);
+    if (type_is_struct(lhs_t)) {
+        int size = type_bit_width(lhs_t) / 8;
+        lower_struct_copy(b, lhs_addr, rhs, size);
+    } else {
+        irb_store(b, lhs_t, lhs_addr, rhs);
+    }
 
     if (out_type)
-        *out_type = lv->type;
+        *out_type = lhs_t;
+
     return rhs;
 }
 
@@ -603,7 +607,7 @@ static void lower_if_stmt(IrBuilder *b, LowerScope *scope, AstNode *expr) {
     AstIfStmt *if_stmt = &expr->as.if_stmt;
 
     TypeId cond_type;
-    IrValue cond = lower_expr(b, scope, if_stmt->cond, &cond_type);
+    IrValue cond = lower_expr(b, scope, if_stmt->cond, EXPR_RVALUE, &cond_type);
 
     int lbl_then = irb_new_label(b);
     int lbl_end  = irb_new_label(b);
@@ -643,7 +647,8 @@ static void lower_while_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
     irb_mark_label(b, lbl_start);
 
     TypeId cond_type;
-    IrValue cond = lower_expr(b, scope, while_stmt->cond, &cond_type);
+    IrValue cond =
+        lower_expr(b, scope, while_stmt->cond, EXPR_RVALUE, &cond_type);
 
     irb_brcond(b, cond, lbl_body);
     irb_br(b, lbl_end);
@@ -676,7 +681,8 @@ static void lower_for_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
     irb_mark_label(b, lbl_start);
 
     TypeId cond_type;
-    IrValue cond = lower_expr(b, scope, for_stmt->cond, &cond_type);
+    IrValue cond =
+        lower_expr(b, scope, for_stmt->cond, EXPR_RVALUE, &cond_type);
     irb_brcond(b, cond, lbl_body);
     irb_br(b, lbl_end);
 
@@ -699,7 +705,7 @@ static IrValue lower_cast_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
     AstCastExpr *cast = &expr->as.cast_expr;
 
     TypeId src_t;
-    IrValue src  = lower_expr(b, scope, cast->expr, &src_t);
+    IrValue src  = lower_expr(b, scope, cast->expr, EXPR_RVALUE, &src_t);
 
     TypeId dst_t = cast->target_type;
 
@@ -734,10 +740,21 @@ static IrValue lower_cast_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
 }
 
 static IrValue lower_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
-                          TypeId *out_type) {
+                          ExprContext ctx, TypeId *out_type) {
+    if (ctx == EXPR_LVALUE) {
+        switch (expr->kind) {
+        case AST_IDENT_EXPR:
+            return lower_ident(b, scope, expr, ctx, out_type);
+        default:
+            fprintf(stderr, "lowering error: expression %d is not a lvalue\n",
+                    (int)expr->kind);
+            abort();
+        }
+    }
+
     switch (expr->kind) {
     case AST_IDENT_EXPR:
-        return lower_ident(b, scope, expr, out_type);
+        return lower_ident(b, scope, expr, ctx, out_type);
 
     case AST_LITERAL_EXPR:
         return lower_literal(b, expr, out_type);
@@ -771,7 +788,6 @@ static IrValue lower_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
 static void lower_var_decl(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
     AstVarDecl *var = &stmt->as.var_decl;
 
-    // TODO: Member access ??
     if (var->type->kind != AST_IDENT_EXPR) {
         fprintf(stderr,
                 "lowering error: only basic ident types supported in IR for "
@@ -787,7 +803,7 @@ static void lower_var_decl(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
 
     if (var->init) {
         TypeId t;
-        IrValue init = lower_expr(b, scope, var->init, &t);
+        IrValue init = lower_expr(b, scope, var->init, EXPR_RVALUE, &t);
 
         if (t != type) {
             fprintf(stderr, "lowering error: mismatched types in var init\n");
@@ -813,7 +829,8 @@ static void lower_return(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
     }
 
     TypeId t;
-    IrValue v = lower_expr(b, scope, stmt->as.return_stmt.expr, &t);
+    IrValue v =
+        lower_expr(b, scope, stmt->as.return_stmt.expr, EXPR_RVALUE, &t);
 
     irb_ret(b, v, t);
 }
@@ -821,7 +838,7 @@ static void lower_return(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
 static void lower_expr_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
     if (!stmt->as.expr_stmt.expr)
         return;
-    (void)lower_expr(b, scope, stmt->as.expr_stmt.expr, NULL);
+    (void)lower_expr(b, scope, stmt->as.expr_stmt.expr, EXPR_RVALUE, NULL);
 }
 
 static void lower_stmt(IrBuilder *b, LowerScope *scope, AstNode *stmt) {
