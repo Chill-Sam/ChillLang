@@ -1,4 +1,5 @@
 #include "x64_codegen.h"
+#include "type.h"
 #include <stdlib.h>
 
 typedef struct FrameLayout {
@@ -203,7 +204,7 @@ static void x64_emit_div_or_mod(FILE *out, const FrameLayout *fl,
     }
 }
 
-// Handles ADD, SUB, MUL, AND, OR, XOR, LOGICAL_AND and LOGICAL_OR
+// Handles ADD, SUB, MUL, AND, OR, XOR, LOGICAL_AND, LOGICAL_OR, SHL and SHR
 static const char *binop_mnem(IrOp op) {
     // LOGICAL_AND/LOGICAL_OR are the same as AND/OR since lowering guarantees
     // bool types
@@ -222,10 +223,13 @@ static const char *binop_mnem(IrOp op) {
         return "or";
     case IR_OP_XOR:
         return "xor";
+    case IR_OP_SHL:
+        return "shl";
+    case IR_OP_SHR:
+        return "shr";
     default:
         fprintf(stderr,
-                "codegen error: invalid operator %d given to norm_binop_mnem\n",
-                op);
+                "codegen error: invalid operator %d given to binop_mnem\n", op);
         abort();
     }
 }
@@ -321,24 +325,15 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         CgSizeInfo size_info = cg_size_info(t);
 
         int off_dst          = stack_offset_for_value(fl, inst->dst);
-        int off0             = stack_offset_for_value(fl, inst->src0);
-        int off1             = stack_offset_for_value(fl, inst->src1);
+        int off_src0         = stack_offset_for_value(fl, inst->src0);
+        int off_src1         = stack_offset_for_value(fl, inst->src1);
 
         fprintf(out, "    mov %s, %s [rbp%+d]\n", size_info.reg, size_info.mem,
-                off0);
+                off_src0);
         fprintf(out, "    mov rcx, QWORD PTR [rbp%+d]\n",
-                off1); // Keeps shift count as 64 bit
-        switch (inst->op) {
-        case IR_OP_SHL:
-            fprintf(out, "    shl %s, cl\n", size_info.reg);
-            break;
-        case IR_OP_SHR:
-            fprintf(out, "    shr %s, cl\n", size_info.reg);
-            break;
-        default:
-            fprintf(stderr, "codegen error: unreachable code\n");
-            abort();
-        }
+                off_src1); // Keeps shift count as 64 bit
+
+        fprintf(out, "    %s %s, cl\n", binop_mnem(inst->op), size_info.reg);
 
         fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off_dst,
                 size_info.reg);
@@ -363,8 +358,7 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         fprintf(out, "    cmp %s, %s [rbp%+d]\n", size_info.reg, size_info.mem,
                 off_src1);
 
-        const Type *lt  = type_get(t);
-        int is_unsigned = lt->is_unsigned;
+        int is_unsigned = type_is_unsigned(t);
 
         const char *cc  = NULL;
         switch (inst->op) {
