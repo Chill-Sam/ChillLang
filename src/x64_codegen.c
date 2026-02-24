@@ -151,9 +151,7 @@ static int stack_offset_for_value(const FrameLayout *fl, IrValue v) {
     return fl->value_slot_off[v];
 }
 
-static void x64_emit_prologue(FILE *out, const IrFunc *fn, int frame_size) {
-    (void)fn;
-
+static void x64_emit_prologue(FILE *out, int frame_size) {
     fprintf(out, "    push rbp\n");
     fprintf(out, "    mov rbp, rsp\n");
     if (frame_size > 0) {
@@ -571,7 +569,7 @@ static void x64_emit_func(FILE *out, const IrFunc *fn) {
     fprintf(out, "    .type %s, @function\n", fn->name);
     fprintf(out, "%s:\n", fn->name);
 
-    x64_emit_prologue(out, fn, fl.frame_size);
+    x64_emit_prologue(out, fl.frame_size);
 
     for (uint32_t i = 0; i < fn->num_args; i++) {
         TypeId t             = fn->value_types[i];
