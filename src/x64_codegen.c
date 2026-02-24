@@ -1,10 +1,14 @@
 #include "x64_codegen.h"
+#include "type.h"
 #include <stdio.h>
 #include <stdlib.h>
 
 typedef struct FrameLayout {
     int frame_size;
-    int *offsets;
+    int *data_offsets;
+    int *ptr_offsets;
+
+    bool *is_alloca;
 } FrameLayout;
 
 static const char *ARG_REGS_8[6] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
@@ -69,14 +73,17 @@ static int align_up(int x, int align) { return (x + align - 1) & ~(align - 1); }
 
 static FrameLayout cg_build_frame(const IrFunc *fn) {
     FrameLayout fl;
-    fl.offsets = malloc(fn->value_count * sizeof(int));
-    if (!fl.offsets) {
+    fl.data_offsets = malloc(fn->value_count * sizeof(int));
+    fl.ptr_offsets  = malloc(fn->value_count * sizeof(int));
+    fl.is_alloca    = calloc(fn->value_count, sizeof(bool));
+    if (!fl.data_offsets || !fl.ptr_offsets || !fl.is_alloca) {
         fprintf(stderr, "oom in cg_build_frame\n");
         abort();
     }
 
     for (uint32_t i = 0; i < fn->value_count; i++) {
-        fl.offsets[i] = 0;
+        fl.data_offsets[i] = 0;
+        fl.ptr_offsets[i]  = 0;
     }
 
     int cur = 0; // distance from rbp downwards (positive)
@@ -91,22 +98,24 @@ static FrameLayout cg_build_frame(const IrFunc *fn) {
             int aln = cg_type_align(inst->type);
             cur     = align_up(cur, aln);
             cur += sz;
-            fl.offsets[inst->dst] = -cur; // rbp-relative
+            fl.data_offsets[inst->dst] = -cur; // rbp-relative
+            fl.is_alloca[inst->dst]    = true;
         }
     }
 
     for (uint32_t v = 0; v < fn->value_count; v++) {
-        if (fl.offsets[v])
-            continue; // already allocated by ALLOCA
-
-        TypeId tid =
-            fn->value_types ? fn->value_types[v] : TYPEID_I64; // fallback
-        int sz  = cg_type_size(tid);
-        int aln = cg_type_align(tid);
+        int sz  = fl.is_alloca[v]
+                      ? 8
+                      : cg_type_size(fn->value_types ? fn->value_types[v]
+                                                     : TYPEID_I64);
+        int aln = fl.is_alloca[v]
+                      ? 8
+                      : cg_type_align(fn->value_types ? fn->value_types[v]
+                                                      : TYPEID_I64);
 
         cur     = align_up(cur, aln);
         cur += sz;
-        fl.offsets[v] = -cur; // rbp-relative
+        fl.ptr_offsets[v] = -cur; // rbp-relative
     }
 
     fl.frame_size = align_up(cur, 16);
@@ -114,12 +123,16 @@ static FrameLayout cg_build_frame(const IrFunc *fn) {
 }
 
 static void cg_free_frame(FrameLayout *fl) {
-    free(fl->offsets);
-    fl->offsets = NULL;
+    free(fl->data_offsets);
+    free(fl->ptr_offsets);
+    free(fl->is_alloca);
+    fl->data_offsets = NULL;
+    fl->ptr_offsets  = NULL;
+    fl->is_alloca    = NULL;
 }
 
 static int stack_offset_for_value(const FrameLayout *fl, IrValue v) {
-    return fl->offsets[v];
+    return fl->ptr_offsets[v];
 }
 
 static const char *cg_mem_prefix(TypeId tid) {
@@ -247,7 +260,30 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         break;
     }
 
-    case IR_OP_ADD:
+    case IR_OP_ADD: {
+
+        TypeId t        = inst->type;
+        const char *reg = cg_reg_for_type(t);
+        const char *mem = cg_mem_prefix(t);
+
+        int off_dst     = stack_offset_for_value(fl, inst->dst);
+        int off0        = stack_offset_for_value(fl, inst->src0);
+        int off1        = stack_offset_for_value(fl, inst->src1);
+        if (t == TYPEID_PTR) {
+            // Pointer arithmetic
+            fprintf(out, "    mov rax, QWORD PTR [rbp%+d]\n", off0);
+            fprintf(out, "    mov rcx, QWORD PTR [rbp%+d]\n", off1);
+            fprintf(out, "    add rax, rcx\n");
+            fprintf(out, "    mov QWORD PTR [rbp%+d], rax\n", off_dst);
+        } else {
+            // Normal integer add
+            fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off0);
+            fprintf(out, "    add %s, %s [rbp%+d]\n", reg, mem, off1);
+            fprintf(out, "    mov %s [rbp%+d], %s\n", mem, off_dst, reg);
+        }
+        break;
+    }
+
     case IR_OP_SUB:
     case IR_OP_MUL: {
         TypeId t        = inst->type;
@@ -261,9 +297,6 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off0);
 
         switch (inst->op) {
-        case IR_OP_ADD:
-            fprintf(out, "    add %s, %s [rbp%+d]\n", reg, mem, off1);
-            break;
         case IR_OP_SUB:
             fprintf(out, "    sub %s, %s [rbp%+d]\n", reg, mem, off1);
             break;
@@ -494,36 +527,37 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         break;
     }
 
-    case IR_OP_ALLOCA:
-        // We don't need to do anything here
+    case IR_OP_ALLOCA: {
+        int data_off = fl->data_offsets[inst->dst];
+        int ptr_off  = fl->ptr_offsets[inst->dst];
+        fprintf(out, "    lea rax, [rbp%+d]\n", data_off);
+        fprintf(out, "    mov QWORD PTR [rbp%+d], rax\n", ptr_off);
         break;
+    }
 
     case IR_OP_LOAD: {
-        IrValue src     = inst->src0;
-        int src_off     = stack_offset_for_value(fl, src);
+        int src_off     = stack_offset_for_value(fl, inst->src0);
+        int dst_off     = stack_offset_for_value(fl, inst->dst);
 
         const char *reg = cg_reg_for_type(inst->type);
         const char *mem = cg_mem_prefix(inst->type);
 
-        int dst_off     = stack_offset_for_value(fl, inst->dst);
-
-        fprintf(out, "    lea rax, [rbp%+d]\n", src_off);
-        fprintf(out, "    mov %s, %s [rax]\n", reg, mem);
+        fprintf(out, "    mov rbx, QWORD PTR [rbp%+d]\n", src_off);
+        fprintf(out, "    mov %s, %s [rbx]\n", reg, mem);
         fprintf(out, "    mov %s [rbp%+d], %s\n", mem, dst_off, reg);
         break;
     }
 
     case IR_OP_STORE: {
-        IrValue dst     = inst->dst;
-        int dst_off     = stack_offset_for_value(fl, dst);
+        int dst_off     = stack_offset_for_value(fl, inst->dst);
         int src_off     = stack_offset_for_value(fl, inst->src0);
 
         const char *reg = cg_reg_for_type(inst->type);
         const char *mem = cg_mem_prefix(inst->type);
 
         fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, src_off);
-        fprintf(out, "    lea rax, [rbp%+d]\n", dst_off);
-        fprintf(out, "    mov %s [rax], %s\n", mem, reg);
+        fprintf(out, "    mov rbx, QWORD PTR [rbp%+d]\n", dst_off);
+        fprintf(out, "    mov %s [rbx], %s\n", mem, reg);
         break;
     }
 
@@ -565,8 +599,9 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         for (uint8_t i = 0; i < inst->call_arg_count; i++) {
             IrValue arg_v   = inst->call_args[i];
             int off         = stack_offset_for_value(fl, arg_v);
-            const char *reg = cg_get_arg_reg(i, inst->type);
-            const char *mem = cg_mem_prefix(inst->type);
+            TypeId arg_t    = fn->value_types[arg_v];
+            const char *reg = cg_get_arg_reg(i, arg_t);
+            const char *mem = cg_mem_prefix(arg_t);
             fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off);
         }
 

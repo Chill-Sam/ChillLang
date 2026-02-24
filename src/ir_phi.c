@@ -268,6 +268,11 @@ VarAnalysis *analyze_variables(IrFunc *fn) {
                 continue;
             }
 
+            // We skip all struct ALLOCAs
+            if (type_is_struct(inst->type)) {
+                continue;
+            }
+
             if (analysis->count >= analysis->cap) {
                 analysis->cap *= 2;
                 analysis->vars =
@@ -534,12 +539,6 @@ static void rename_block(IrFunc *fn, VarAnalysis *analysis, IrBlock *block,
             int var_id = find_var_for_alloca(analysis, inst->src0);
 
             if (var_id >= 0) {
-                // Dont eliminate struct loads!
-                if (type_is_struct(analysis->vars[var_id].type)) {
-                    inst = next;
-                    continue;
-                }
-
                 IrValue current_def = top_def(state, var_id);
                 replace_value_uses(fn, inst->dst, current_def);
                 remove_inst(inst);
@@ -550,12 +549,6 @@ static void rename_block(IrFunc *fn, VarAnalysis *analysis, IrBlock *block,
             int var_id = find_var_for_alloca(analysis, inst->dst);
 
             if (var_id >= 0) {
-                // Dont eliminate struct stores!
-                if (type_is_struct(analysis->vars[var_id].type)) {
-                    inst = next;
-                    continue;
-                }
-
                 IrValue stored_value = inst->src0;
                 push_def(state, var_id, stored_value);
                 remove_inst(inst);

@@ -208,7 +208,76 @@ static IrValue lower_ident(IrBuilder *b, LowerScope *scope, AstNode *expr,
         return lv->value;
     }
 
+    if (type_is_struct(lv->type)) {
+        return lv->value;
+    }
+
     return irb_load(b, lv->type, lv->value);
+}
+
+static IrValue lower_member_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
+                                 ExprContext ctx, TypeId *out_type) {
+    AstMemberExpr *member = &expr->as.member_expr;
+
+    TypeId base_type;
+    IrValue base_addr =
+        lower_expr(b, scope, member->base, EXPR_LVALUE, &base_type);
+
+    const Type *struct_type = type_get(base_type);
+    if (!struct_type || !type_is_struct(base_type)) {
+        fprintf(stderr, "lowering error: member access on non-struct type\n");
+        abort();
+    }
+
+    Token *field_tok = &member->field;
+    int field_idx    = -1;
+
+    for (int i = 0; i < struct_type->struct_decl->as.struct_decl.fields.count;
+         i++) {
+        Token *def_field_tok =
+            &struct_type->struct_decl->as.struct_decl.fields.items[i]
+                 ->as.field.name;
+
+        if (memcmp(field_tok->lexeme, def_field_tok->lexeme,
+                   def_field_tok->length) == 0) {
+            field_idx = i;
+            break;
+        }
+    }
+
+    if (field_idx < 0) {
+        fprintf(stderr, "lowering error: field '%.*s' not found in struct\n",
+                (int)field_tok->length, field_tok->lexeme);
+        abort();
+    }
+
+    size_t field_offset = struct_type->struct_info.field_offsets[field_idx];
+    TypeId field_type   = lower_resolve_type(
+        &struct_type->struct_decl->as.struct_decl.fields.items[field_idx]
+             ->as.field.type->as.ident_expr.name);
+
+    IrValue field_addr;
+    if (field_offset == 0) {
+        // First field - same address as base
+        field_addr = base_addr;
+    } else {
+        // Add offset to base address
+        IrValue offset_val = irb_const_int(b, TYPEID_PTR, field_offset);
+        field_addr = irb_binop(b, IR_OP_ADD, TYPEID_PTR, base_addr, offset_val);
+    }
+
+    if (out_type)
+        *out_type = field_type;
+
+    if (ctx == EXPR_LVALUE) {
+        return field_addr;
+    } else {
+        if (type_is_struct(field_type)) {
+            return field_addr;
+        } else {
+            return irb_load(b, field_type, field_addr);
+        }
+    }
 }
 
 static int64_t parse_int_literal(const Token *tok) {
@@ -745,6 +814,8 @@ static IrValue lower_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
         switch (expr->kind) {
         case AST_IDENT_EXPR:
             return lower_ident(b, scope, expr, ctx, out_type);
+        case AST_MEMBER_EXPR:
+            return lower_member_expr(b, scope, expr, ctx, out_type);
         default:
             fprintf(stderr, "lowering error: expression %d is not a lvalue\n",
                     (int)expr->kind);
@@ -755,6 +826,9 @@ static IrValue lower_expr(IrBuilder *b, LowerScope *scope, AstNode *expr,
     switch (expr->kind) {
     case AST_IDENT_EXPR:
         return lower_ident(b, scope, expr, ctx, out_type);
+
+    case AST_MEMBER_EXPR:
+        return lower_member_expr(b, scope, expr, ctx, out_type);
 
     case AST_LITERAL_EXPR:
         return lower_literal(b, expr, out_type);
@@ -955,7 +1029,16 @@ static IrFunc lower_func(AstNode *fn) {
 
         ir_fn.value_types[i] = type;
         IrValue v            = (IrValue)i;
-        lscope_add_var(scope, pname, type, v);
+
+        // Struct paramaters already contain the pointer
+        if (type_is_struct(type)) {
+            lscope_add_var(scope, pname, type, v);
+        } else {
+            IrValue slot = irb_alloca(&b, type);
+            irb_store(&b, type, slot, v);
+            lscope_add_var(scope, pname, type, slot);
+        }
+
         free(pname);
     }
 
