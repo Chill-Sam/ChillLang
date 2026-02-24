@@ -1,5 +1,6 @@
 #include "x64_codegen.h"
 #include "type.h"
+#include <bits/posix2_lim.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -11,11 +12,17 @@ typedef struct FrameLayout {
     bool *is_alloca;
 } FrameLayout;
 
+typedef struct CgSizeInfo {
+    const char *mem;
+    const char *reg;
+} CgSizeInfo;
+
 static const char *ARG_REGS_8[6] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 static const char *ARG_REGS_4[6] = {"edi", "esi", "edx", "ecx", "r8d", "r9d"};
 static const char *ARG_REGS_2[6] = {"di", "si", "dx", "cx", "r8w", "r9w"};
 static const char *ARG_REGS_1[6] = {"dil", "sil", "dl", "cl", "r8b", "r9b"};
 
+// ----- Codegen type helper functions -----
 static int cg_type_size(TypeId tid) {
     const Type *t = type_get(tid);
     switch (t->kind) {
@@ -69,6 +76,42 @@ static const char *cg_get_arg_reg(int arg_count, TypeId type) {
     }
 }
 
+// Calculate size information for a type.
+static CgSizeInfo cg_size_info(TypeId tid) {
+    int sz = cg_type_size(tid);
+
+    CgSizeInfo size_info;
+
+    switch (sz) {
+    case 1: {
+        size_info.reg = "al";
+        size_info.mem = "BYTE PTR";
+        break;
+    }
+    case 2: {
+        size_info.reg = "ax";
+        size_info.mem = "WORD PTR";
+        break;
+    }
+    case 4: {
+        size_info.reg = "eax";
+        size_info.mem = "DWORD PTR";
+        break;
+    }
+    case 8: {
+        size_info.reg = "rax";
+        size_info.mem = "QWORD PTR";
+        break;
+    }
+    default:
+        fprintf(stderr, "codegen: unsupported type size %d\n", sz);
+        abort();
+    }
+
+    return size_info;
+}
+
+// Codegen frame layout calculation
 static int align_up(int x, int align) { return (x + align - 1) & ~(align - 1); }
 
 static FrameLayout cg_build_frame(const IrFunc *fn) {
@@ -135,40 +178,6 @@ static int stack_offset_for_value(const FrameLayout *fl, IrValue v) {
     return fl->ptr_offsets[v];
 }
 
-static const char *cg_mem_prefix(TypeId tid) {
-    int sz = cg_type_size(tid);
-    switch (sz) {
-    case 1:
-        return "BYTE PTR";
-    case 2:
-        return "WORD PTR";
-    case 4:
-        return "DWORD PTR";
-    case 8:
-        return "QWORD PTR";
-    default:
-        fprintf(stderr, "codegen: unsupported type size %d\n", sz);
-        abort();
-    }
-}
-
-static const char *cg_reg_for_type(TypeId tid) {
-    int sz = cg_type_size(tid);
-    switch (sz) {
-    case 1:
-        return "al";
-    case 2:
-        return "ax";
-    case 4:
-        return "eax";
-    case 8:
-        return "rax";
-    default:
-        fprintf(stderr, "codegen: unsupported type size %d\n", sz);
-        abort();
-    }
-}
-
 static void x64_emit_prologue(FILE *out, const IrFunc *fn, int frame_size) {
     (void)fn;
 
@@ -215,12 +224,11 @@ static void x64_emit_div_or_mod(FILE *out, const FrameLayout *fl,
         }
 
         // Now quotient in EAX, remainder in EDX (32-bit)
-        const char *store_mem =
-            cg_mem_prefix(t); // BYTE/WORD/DWORD for final type
+        CgSizeInfo size_info = cg_size_info(t);
         if (is_mod) {
-            fprintf(out, "    mov %s [rbp%+d], edx\n", store_mem, off_dst);
+            fprintf(out, "    mov %s [rbp%+d], edx\n", size_info.mem, off_dst);
         } else {
-            fprintf(out, "    mov %s [rbp%+d], eax\n", store_mem, off_dst);
+            fprintf(out, "    mov %s [rbp%+d], eax\n", size_info.mem, off_dst);
         }
     } else { // div_sz == 8
         const char *div_mem = "QWORD PTR";
@@ -236,11 +244,11 @@ static void x64_emit_div_or_mod(FILE *out, const FrameLayout *fl,
         }
 
         // quotient in RAX, remainder in RDX (64-bit)
-        const char *store_mem = cg_mem_prefix(t); // may be QWORD
+        CgSizeInfo size_info = cg_size_info(t);
         if (is_mod) {
-            fprintf(out, "    mov %s [rbp%+d], rdx\n", store_mem, off_dst);
+            fprintf(out, "    mov %s [rbp%+d], rdx\n", size_info.mem, off_dst);
         } else {
-            fprintf(out, "    mov %s [rbp%+d], rax\n", store_mem, off_dst);
+            fprintf(out, "    mov %s [rbp%+d], rax\n", size_info.mem, off_dst);
         }
     }
 }
@@ -250,25 +258,23 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
     // TODO: Implement other instructions
     switch (inst->op) {
     case IR_CONST_INT: {
-        TypeId t        = inst->type;
-        const char *reg = cg_reg_for_type(t);
-        const char *mem = cg_mem_prefix(t);
+        TypeId t             = inst->type;
+        CgSizeInfo size_info = cg_size_info(t);
 
-        int off_dst     = stack_offset_for_value(fl, inst->dst);
-        fprintf(out, "    mov %s [rbp%+d], %lld\n", mem, off_dst,
+        int off_dst          = stack_offset_for_value(fl, inst->dst);
+        fprintf(out, "    mov %s [rbp%+d], %lld\n", size_info.mem, off_dst,
                 (long long)inst->imm);
         break;
     }
 
     case IR_OP_ADD: {
 
-        TypeId t        = inst->type;
-        const char *reg = cg_reg_for_type(t);
-        const char *mem = cg_mem_prefix(t);
+        TypeId t             = inst->type;
+        CgSizeInfo size_info = cg_size_info(t);
 
-        int off_dst     = stack_offset_for_value(fl, inst->dst);
-        int off0        = stack_offset_for_value(fl, inst->src0);
-        int off1        = stack_offset_for_value(fl, inst->src1);
+        int off_dst          = stack_offset_for_value(fl, inst->dst);
+        int off0             = stack_offset_for_value(fl, inst->src0);
+        int off1             = stack_offset_for_value(fl, inst->src1);
         if (t == TYPEID_PTR) {
             // Pointer arithmetic
             fprintf(out, "    mov rax, QWORD PTR [rbp%+d]\n", off0);
@@ -277,37 +283,43 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
             fprintf(out, "    mov QWORD PTR [rbp%+d], rax\n", off_dst);
         } else {
             // Normal integer add
-            fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off0);
-            fprintf(out, "    add %s, %s [rbp%+d]\n", reg, mem, off1);
-            fprintf(out, "    mov %s [rbp%+d], %s\n", mem, off_dst, reg);
+            fprintf(out, "    mov %s, %s [rbp%+d]\n", size_info.reg,
+                    size_info.mem, off0);
+            fprintf(out, "    add %s, %s [rbp%+d]\n", size_info.reg,
+                    size_info.mem, off1);
+            fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off_dst,
+                    size_info.reg);
         }
         break;
     }
 
     case IR_OP_SUB:
     case IR_OP_MUL: {
-        TypeId t        = inst->type;
-        const char *reg = cg_reg_for_type(t);
-        const char *mem = cg_mem_prefix(t);
+        TypeId t             = inst->type;
+        CgSizeInfo size_info = cg_size_info(t);
 
-        int off_dst     = stack_offset_for_value(fl, inst->dst);
-        int off0        = stack_offset_for_value(fl, inst->src0);
-        int off1        = stack_offset_for_value(fl, inst->src1);
+        int off_dst          = stack_offset_for_value(fl, inst->dst);
+        int off0             = stack_offset_for_value(fl, inst->src0);
+        int off1             = stack_offset_for_value(fl, inst->src1);
 
-        fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off0);
+        fprintf(out, "    mov %s, %s [rbp%+d]\n", size_info.reg, size_info.mem,
+                off0);
 
         switch (inst->op) {
         case IR_OP_SUB:
-            fprintf(out, "    sub %s, %s [rbp%+d]\n", reg, mem, off1);
+            fprintf(out, "    sub %s, %s [rbp%+d]\n", size_info.reg,
+                    size_info.mem, off1);
             break;
         case IR_OP_MUL:
-            fprintf(out, "    imul %s, %s [rbp%+d]\n", reg, mem, off1);
+            fprintf(out, "    imul %s, %s [rbp%+d]\n", size_info.reg,
+                    size_info.mem, off1);
             break;
         default:
             break;
         }
 
-        fprintf(out, "    mov %s [rbp%+d], %s\n", mem, off_dst, reg);
+        fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off_dst,
+                size_info.reg);
         break;
     }
 
@@ -320,60 +332,65 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
     case IR_OP_AND:
     case IR_OP_OR:
     case IR_OP_XOR: {
-        TypeId t        = inst->type;
-        const char *reg = cg_reg_for_type(t);
-        const char *mem = cg_mem_prefix(t);
+        TypeId t             = inst->type;
+        CgSizeInfo size_info = cg_size_info(t);
 
-        int off_dst     = stack_offset_for_value(fl, inst->dst);
-        int off0        = stack_offset_for_value(fl, inst->src0);
-        int off1        = stack_offset_for_value(fl, inst->src1);
+        int off_dst          = stack_offset_for_value(fl, inst->dst);
+        int off0             = stack_offset_for_value(fl, inst->src0);
+        int off1             = stack_offset_for_value(fl, inst->src1);
 
-        fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off0);
+        fprintf(out, "    mov %s, %s [rbp%+d]\n", size_info.reg, size_info.mem,
+                off0);
         switch (inst->op) {
         case IR_OP_AND:
-            fprintf(out, "    and %s, %s [rbp%+d]\n", reg, mem, off1);
+            fprintf(out, "    and %s, %s [rbp%+d]\n", size_info.reg,
+                    size_info.mem, off1);
             break;
         case IR_OP_OR:
-            fprintf(out, "    or %s, %s [rbp%+d]\n", reg, mem, off1);
+            fprintf(out, "    or %s, %s [rbp%+d]\n", size_info.reg,
+                    size_info.mem, off1);
             break;
         case IR_OP_XOR:
-            fprintf(out, "    xor %s, %s [rbp%+d]\n", reg, mem, off1);
+            fprintf(out, "    xor %s, %s [rbp%+d]\n", size_info.reg,
+                    size_info.mem, off1);
             break;
         default:
             fprintf(stderr, "codegen error: unreachable code\n");
             abort();
         }
 
-        fprintf(out, "    mov %s [rbp%+d], %s\n", mem, off_dst, reg);
+        fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off_dst,
+                size_info.reg);
         break;
     }
 
     case IR_OP_SHL:
     case IR_OP_SHR: {
-        TypeId t        = inst->type;
-        const char *reg = cg_reg_for_type(t);
-        const char *mem = cg_mem_prefix(t);
+        TypeId t             = inst->type;
+        CgSizeInfo size_info = cg_size_info(t);
 
-        int off_dst     = stack_offset_for_value(fl, inst->dst);
-        int off0        = stack_offset_for_value(fl, inst->src0);
-        int off1        = stack_offset_for_value(fl, inst->src1);
+        int off_dst          = stack_offset_for_value(fl, inst->dst);
+        int off0             = stack_offset_for_value(fl, inst->src0);
+        int off1             = stack_offset_for_value(fl, inst->src1);
 
-        fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off0);
+        fprintf(out, "    mov %s, %s [rbp%+d]\n", size_info.reg, size_info.mem,
+                off0);
         fprintf(out, "    mov rcx, QWORD PTR [rbp%+d]\n",
                 off1); // Keeps shift count as 64 bit
         switch (inst->op) {
         case IR_OP_SHL:
-            fprintf(out, "    shl %s, cl\n", reg);
+            fprintf(out, "    shl %s, cl\n", size_info.reg);
             break;
         case IR_OP_SHR:
-            fprintf(out, "    shr %s, cl\n", reg);
+            fprintf(out, "    shr %s, cl\n", size_info.reg);
             break;
         default:
             fprintf(stderr, "codegen error: unreachable code\n");
             abort();
         }
 
-        fprintf(out, "    mov %s [rbp%+d], %s\n", mem, off_dst, reg);
+        fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off_dst,
+                size_info.reg);
         break;
     }
 
@@ -383,18 +400,17 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
     case IR_OP_CMP_GE:
     case IR_OP_CMP_EQ:
     case IR_OP_CMP_NE: {
-        TypeId t        = fn->value_types[inst->src0];
-        int sz          = cg_type_size(t);
-        const char *mem = cg_mem_prefix(t);
+        TypeId t             = fn->value_types[inst->src0];
+        CgSizeInfo size_info = cg_size_info(t);
 
-        int off_dst     = stack_offset_for_value(fl, inst->dst);
-        int off_src0    = stack_offset_for_value(fl, inst->src0);
-        int off_src1    = stack_offset_for_value(fl, inst->src1);
+        int off_dst          = stack_offset_for_value(fl, inst->dst);
+        int off_src0         = stack_offset_for_value(fl, inst->src0);
+        int off_src1         = stack_offset_for_value(fl, inst->src1);
 
-        const char *reg = cg_reg_for_type(t);
-
-        fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off_src0);
-        fprintf(out, "    cmp %s, %s [rbp%+d]\n", reg, mem, off_src1);
+        fprintf(out, "    mov %s, %s [rbp%+d]\n", size_info.reg, size_info.mem,
+                off_src0);
+        fprintf(out, "    cmp %s, %s [rbp%+d]\n", size_info.reg, size_info.mem,
+                off_src1);
 
         const Type *lt  = type_get(t);
         int is_unsigned = lt->is_unsigned;
@@ -425,85 +441,90 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         }
 
         // setcc writes a 0/1 byte into AL; bool is stored as 1 byte
-        const char *bool_mem = cg_mem_prefix(inst->type);
+        CgSizeInfo bool_size_info = cg_size_info(inst->type);
         fprintf(out, "    set%s al\n", cc);
-        fprintf(out, "    mov %s [rbp%+d], al\n", bool_mem, off_dst);
+        fprintf(out, "    mov %s [rbp%+d], al\n", bool_size_info.mem, off_dst);
 
         break;
     }
 
     case IR_OP_NEG:
     case IR_OP_BITNOT: {
-        TypeId t        = inst->type;
-        const char *reg = cg_reg_for_type(t);
-        const char *mem = cg_mem_prefix(t);
+        TypeId t             = inst->type;
+        CgSizeInfo size_info = cg_size_info(t);
 
-        int off_dst     = stack_offset_for_value(fl, inst->dst);
-        int off0        = stack_offset_for_value(fl, inst->src0);
+        int off_dst          = stack_offset_for_value(fl, inst->dst);
+        int off0             = stack_offset_for_value(fl, inst->src0);
 
-        fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off0);
+        fprintf(out, "    mov %s, %s [rbp%+d]\n", size_info.reg, size_info.mem,
+                off0);
         switch (inst->op) {
         case IR_OP_NEG:
-            fprintf(out, "    neg %s\n", reg);
+            fprintf(out, "    neg %s\n", size_info.reg);
             break;
         case IR_OP_BITNOT:
-            fprintf(out, "    not %s\n", reg);
+            fprintf(out, "    not %s\n", size_info.reg);
             break;
         default:
             fprintf(stderr, "codegen error: unreachable code\n");
             abort();
         }
 
-        fprintf(out, "    mov %s [rbp%+d], %s\n", mem, off_dst, reg);
+        fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off_dst,
+                size_info.reg);
         break;
     }
 
     case IR_OP_LOGICAL_AND:
     case IR_OP_LOGICAL_OR: {
-        TypeId t        = inst->type;
-        const char *reg = cg_reg_for_type(t);
-        const char *mem = cg_mem_prefix(t);
+        TypeId t             = inst->type;
+        CgSizeInfo size_info = cg_size_info(t);
 
-        int off_dst     = stack_offset_for_value(fl, inst->dst);
-        int off0        = stack_offset_for_value(fl, inst->src0);
-        int off1        = stack_offset_for_value(fl, inst->src1);
+        int off_dst          = stack_offset_for_value(fl, inst->dst);
+        int off0             = stack_offset_for_value(fl, inst->src0);
+        int off1             = stack_offset_for_value(fl, inst->src1);
 
-        fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off0);
+        fprintf(out, "    mov %s, %s [rbp%+d]\n", size_info.reg, size_info.mem,
+                off0);
         switch (inst->op) {
         case IR_OP_LOGICAL_AND:
-            fprintf(out, "    and %s, %s [rbp%+d]\n", reg, mem, off1);
+            fprintf(out, "    and %s, %s [rbp%+d]\n", size_info.reg,
+                    size_info.mem, off1);
             break;
         case IR_OP_LOGICAL_OR:
-            fprintf(out, "    or %s, %s [rbp%+d]\n", reg, mem, off1);
+            fprintf(out, "    or %s, %s [rbp%+d]\n", size_info.reg,
+                    size_info.mem, off1);
             break;
         default:
             fprintf(stderr, "codegen error: unreachable code\n");
             abort();
         }
 
-        fprintf(out, "    mov %s [rbp%+d], %s\n", mem, off_dst, reg);
+        fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off_dst,
+                size_info.reg);
         break;
     }
 
     case IR_OP_ZEXT:
     case IR_OP_SEXT:
     case IR_OP_TRUNC: {
-        TypeId dst_t        = inst->type;
-        TypeId src_t        = fn->value_types[inst->src0];
+        TypeId dst_t             = inst->type;
+        TypeId src_t             = fn->value_types[inst->src0];
 
-        int dst_sz          = cg_type_size(dst_t);
-        int src_sz          = cg_type_size(src_t);
+        int dst_sz               = cg_type_size(dst_t);
+        int src_sz               = cg_type_size(src_t);
 
-        int off_dst         = stack_offset_for_value(fl, inst->dst);
-        int off_src         = stack_offset_for_value(fl, inst->src0);
+        int off_dst              = stack_offset_for_value(fl, inst->dst);
+        int off_src              = stack_offset_for_value(fl, inst->src0);
 
-        const char *dst_mem = cg_mem_prefix(dst_t);
-        const char *src_mem = cg_mem_prefix(src_t);
+        CgSizeInfo dst_size_info = cg_size_info(dst_t);
+        CgSizeInfo src_size_info = cg_size_info(src_t);
 
         if (inst->op == IR_OP_TRUNC) {
-            const char *reg = cg_reg_for_type(dst_t);
-            fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, dst_mem, off_src);
-            fprintf(out, "    mov %s [rbp%+d], %s\n", dst_mem, off_dst, reg);
+            fprintf(out, "    mov %s, %s [rbp%+d]\n", dst_size_info.reg,
+                    dst_size_info.mem, off_src);
+            fprintf(out, "    mov %s [rbp%+d], %s\n", dst_size_info.mem,
+                    off_dst, dst_size_info.reg);
             break;
         }
 
@@ -517,13 +538,14 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         const char *cmd = src_sz == 4              ? "mov"
                           : inst->op == IR_OP_ZEXT ? "movzx"
                                                    : "movsx";
-        fprintf(out, "    %s eax, %s [rbp%+d]\n", cmd, src_mem, off_src);
+        fprintf(out, "    %s eax, %s [rbp%+d]\n", cmd, src_size_info.mem,
+                off_src);
         if (src_sz == 4 && dst_sz == 8 && inst->op == IR_OP_SEXT) {
             fprintf(out, "    cdqe\n");
         }
 
-        const char *dst_reg = cg_reg_for_type(dst_t);
-        fprintf(out, "    mov %s [rbp%+d], %s\n", dst_mem, off_dst, dst_reg);
+        fprintf(out, "    mov %s [rbp%+d], %s\n", dst_size_info.mem, off_dst,
+                dst_size_info.reg);
         break;
     }
 
@@ -536,41 +558,44 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
     }
 
     case IR_OP_LOAD: {
-        int src_off     = stack_offset_for_value(fl, inst->src0);
-        int dst_off     = stack_offset_for_value(fl, inst->dst);
+        TypeId t             = inst->type;
+        CgSizeInfo size_info = cg_size_info(t);
 
-        const char *reg = cg_reg_for_type(inst->type);
-        const char *mem = cg_mem_prefix(inst->type);
+        int src_off          = stack_offset_for_value(fl, inst->src0);
+        int dst_off          = stack_offset_for_value(fl, inst->dst);
 
         fprintf(out, "    mov rbx, QWORD PTR [rbp%+d]\n", src_off);
-        fprintf(out, "    mov %s, %s [rbx]\n", reg, mem);
-        fprintf(out, "    mov %s [rbp%+d], %s\n", mem, dst_off, reg);
+        fprintf(out, "    mov %s, %s [rbx]\n", size_info.reg, size_info.mem);
+        fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, dst_off,
+                size_info.reg);
         break;
     }
 
     case IR_OP_STORE: {
-        int dst_off     = stack_offset_for_value(fl, inst->dst);
-        int src_off     = stack_offset_for_value(fl, inst->src0);
+        TypeId t             = inst->type;
+        CgSizeInfo size_info = cg_size_info(t);
 
-        const char *reg = cg_reg_for_type(inst->type);
-        const char *mem = cg_mem_prefix(inst->type);
+        int dst_off          = stack_offset_for_value(fl, inst->dst);
+        int src_off          = stack_offset_for_value(fl, inst->src0);
 
-        fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, src_off);
+        fprintf(out, "    mov %s, %s [rbp%+d]\n", size_info.reg, size_info.mem,
+                src_off);
         fprintf(out, "    mov rbx, QWORD PTR [rbp%+d]\n", dst_off);
-        fprintf(out, "    mov %s [rbx], %s\n", mem, reg);
+        fprintf(out, "    mov %s [rbx], %s\n", size_info.mem, size_info.reg);
         break;
     }
 
     case IR_OP_MOV: {
-        TypeId t        = inst->type;
-        const char *reg = cg_reg_for_type(t);
-        const char *mem = cg_mem_prefix(t);
+        TypeId t             = inst->type;
+        CgSizeInfo size_info = cg_size_info(t);
 
-        int off_dst     = stack_offset_for_value(fl, inst->dst);
-        int off_src     = stack_offset_for_value(fl, inst->src0);
+        int off_dst          = stack_offset_for_value(fl, inst->dst);
+        int off_src          = stack_offset_for_value(fl, inst->src0);
 
-        fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off_src);
-        fprintf(out, "    mov %s [rbp%+d], %s\n", mem, off_dst, reg);
+        fprintf(out, "    mov %s, %s [rbp%+d]\n", size_info.reg, size_info.mem,
+                off_src);
+        fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off_dst,
+                size_info.reg);
         break;
     }
 
@@ -583,10 +608,12 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
         break;
 
     case IR_OP_BRCOND: {
-        TypeId cond_t = fn->value_types[inst->src0];
-        IrValue cond  = inst->src0;
-        int off       = stack_offset_for_value(fl, cond);
-        fprintf(out, "    cmp %s [rbp%+d], 0\n", cg_mem_prefix(cond_t), off);
+        TypeId cond_t             = fn->value_types[inst->src0];
+        CgSizeInfo cond_size_info = cg_size_info(cond_t);
+
+        IrValue cond              = inst->src0;
+        int off                   = stack_offset_for_value(fl, cond);
+        fprintf(out, "    cmp %s [rbp%+d], 0\n", cond_size_info.mem, off);
         fprintf(out, "    jne .L%s%ld\n", fn->name, inst->imm);
         break;
     }
@@ -597,23 +624,26 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
 
     case IR_OP_CALL: {
         for (uint8_t i = 0; i < inst->call_arg_count; i++) {
-            IrValue arg_v   = inst->call_args[i];
-            int off         = stack_offset_for_value(fl, arg_v);
-            TypeId arg_t    = fn->value_types[arg_v];
-            const char *reg = cg_get_arg_reg(i, arg_t);
-            const char *mem = cg_mem_prefix(arg_t);
-            fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off);
+            IrValue arg_v            = inst->call_args[i];
+            TypeId arg_t             = fn->value_types[arg_v];
+            CgSizeInfo arg_size_info = cg_size_info(arg_t);
+
+            int off                  = stack_offset_for_value(fl, arg_v);
+
+            const char *reg          = cg_get_arg_reg(i, arg_t);
+            fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, arg_size_info.mem,
+                    off);
         }
 
         fprintf(out, "    call %s\n", inst->call_name);
 
         if (inst->dst != (IrValue)~0u) {
-            TypeId t        = inst->type;
-            const char *mem = cg_mem_prefix(t);
-            const char *reg = cg_reg_for_type(t);
+            TypeId t             = inst->type;
+            CgSizeInfo size_info = cg_size_info(t);
 
-            int off_dst     = stack_offset_for_value(fl, inst->dst);
-            fprintf(out, "    mov %s [rbp%+d], %s\n", mem, off_dst, reg);
+            int off_dst          = stack_offset_for_value(fl, inst->dst);
+            fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off_dst,
+                    size_info.reg);
         }
 
         break;
@@ -621,12 +651,12 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
 
     case IR_OP_RET: {
         if (inst->src0 != (IrValue)~0u) {
-            TypeId t        = inst->type;
-            const char *reg = cg_reg_for_type(t);
-            const char *mem = cg_mem_prefix(t);
+            TypeId t             = inst->type;
+            CgSizeInfo size_info = cg_size_info(t);
 
-            int off         = stack_offset_for_value(fl, inst->src0);
-            fprintf(out, "    mov %s, %s [rbp%+d]\n", reg, mem, off);
+            int off              = stack_offset_for_value(fl, inst->src0);
+            fprintf(out, "    mov %s, %s [rbp%+d]\n", size_info.reg,
+                    size_info.mem, off);
             fprintf(out, "    jmp .L%s_exit\n", fn->name);
         }
 
@@ -650,11 +680,12 @@ static void x64_emit_func(FILE *out, const IrFunc *fn) {
     x64_emit_prologue(out, fn, fl.frame_size);
 
     for (uint32_t i = 0; i < fn->num_args; i++) {
-        TypeId t        = fn->value_types[i];
-        const char *reg = cg_get_arg_reg(i, t);
-        const char *mem = cg_mem_prefix(t);
-        int off         = stack_offset_for_value(&fl, (IrValue)i);
-        fprintf(out, "    mov %s [rbp%+d], %s\n", mem, off, reg);
+        TypeId t             = fn->value_types[i];
+        const char *reg      = cg_get_arg_reg(i, t);
+        CgSizeInfo size_info = cg_size_info(t);
+        int off              = stack_offset_for_value(&fl, (IrValue)i);
+
+        fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off, reg);
     }
 
     IrBlock *block = fn->entry;
