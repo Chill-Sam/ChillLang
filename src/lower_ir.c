@@ -313,8 +313,8 @@ static IrValue lower_literal(IrBuilder *b, AstNode *expr, TypeId *out_type) {
         inst.op   = IR_CONST_INT;
         inst.type = TYPEID_BOOL;
         inst.dst  = dst;
-        inst.src0 = (IrValue)~0u;
-        inst.src1 = (IrValue)~0u;
+        inst.src0 = IR_VALUE_NONE;
+        inst.src1 = IR_VALUE_NONE;
         inst.imm  = tok->kind == TOK_KW_TRUE ? 1 : 0;
         irb_emit(b, inst);
 
@@ -363,7 +363,7 @@ static IrValue lower_literal(IrBuilder *b, AstNode *expr, TypeId *out_type) {
         return irb_const_int(b, t, imm);
     }
 
-    return (IrValue)~0u; // unreachable
+    return IR_VALUE_NONE; // unreachable
 }
 
 static void lower_struct_copy(IrBuilder *b, IrValue dst_ptr, IrValue src_ptr,

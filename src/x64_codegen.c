@@ -1,7 +1,4 @@
 #include "x64_codegen.h"
-#include "type.h"
-#include <bits/posix2_lim.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 typedef struct FrameLayout {
@@ -637,7 +634,7 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
 
         fprintf(out, "    call %s\n", inst->call_name);
 
-        if (inst->dst != (IrValue)~0u) {
+        if (inst->dst != IR_VALUE_NONE) {
             TypeId t             = inst->type;
             CgSizeInfo size_info = cg_size_info(t);
 
@@ -650,7 +647,7 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
     }
 
     case IR_OP_RET: {
-        if (inst->src0 != (IrValue)~0u) {
+        if (inst->src0 != IR_VALUE_NONE) {
             TypeId t             = inst->type;
             CgSizeInfo size_info = cg_size_info(t);
 

@@ -245,7 +245,7 @@ static const char *ir_op_name(IrOp op) {
 static void ir_dump_instr(const IrInst *in, FILE *out) {
     fprintf(out, "  %s", ir_op_name(in->op));
 
-    if (in->dst != (IrValue)~0u) {
+    if (in->dst != IR_VALUE_NONE) {
         fprintf(out, " v%u =", in->dst);
     }
 
@@ -331,7 +331,7 @@ static void ir_dump_instr(const IrInst *in, FILE *out) {
         break;
 
     case IR_OP_RET:
-        if (in->src0 != (IrValue)~0u) {
+        if (in->src0 != IR_VALUE_NONE) {
             fprintf(out, " v%u", in->src0);
         }
         break;

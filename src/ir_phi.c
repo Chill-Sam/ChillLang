@@ -1,5 +1,4 @@
 #include "ir_phi.h"
-#include "ir.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -345,7 +344,7 @@ static void insert_phi_node(IrFunc *fn, IrBlock *b, VarInfo *var) {
 
     // Fill phi values
     for (int i = 0; i < b->pred_count; i++) {
-        phi->phi.values[i] = (IrValue)~0u;
+        phi->phi.values[i] = IR_VALUE_NONE;
         phi->phi.labels[i] = b->preds[i]->label_value;
     }
 
@@ -604,7 +603,7 @@ static IrInst *create_copy_inst(IrFunc *fn, IrValue dst, IrValue src,
     copy->op   = IR_OP_MOV;
     copy->dst  = dst;
     copy->src0 = src;
-    copy->src1 = (IrValue)~0u;
+    copy->src1 = IR_VALUE_NONE;
     copy->type = type;
 
     return copy;

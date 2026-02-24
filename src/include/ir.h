@@ -7,6 +7,8 @@
 typedef uint32_t IrValue;
 typedef uint32_t IrInstId;
 
+#define IR_VALUE_NONE ((IrValue)~0u)
+
 typedef enum IrOp {
     IR_OP_INVALID = 0,
 
