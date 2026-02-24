@@ -12,6 +12,13 @@ typedef struct CgSizeInfo {
     const char *reg;
 } CgSizeInfo;
 
+static const CgSizeInfo SIZE_CLASSES[] = {
+    [1] = {.mem = "BYTE PTR", .reg = "al"},
+    [2] = {.mem = "WORD PTR", .reg = "ax"},
+    [4] = {.mem = "DWORD PTR", .reg = "eax"},
+    [8] = {.mem = "QWORD PTR", .reg = "rax"},
+};
+
 static const char *ARG_REGS_8[6] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 static const char *ARG_REGS_4[6] = {"edi", "esi", "edx", "ecx", "r8d", "r9d"};
 static const char *ARG_REGS_2[6] = {"di", "si", "dx", "cx", "r8w", "r9w"};
@@ -75,35 +82,12 @@ static const char *cg_get_arg_reg(int arg_count, TypeId type) {
 static CgSizeInfo cg_size_info(TypeId tid) {
     int sz = cg_type_size(tid);
 
-    CgSizeInfo size_info;
-
-    switch (sz) {
-    case 1: {
-        size_info.reg = "al";
-        size_info.mem = "BYTE PTR";
-        break;
-    }
-    case 2: {
-        size_info.reg = "ax";
-        size_info.mem = "WORD PTR";
-        break;
-    }
-    case 4: {
-        size_info.reg = "eax";
-        size_info.mem = "DWORD PTR";
-        break;
-    }
-    case 8: {
-        size_info.reg = "rax";
-        size_info.mem = "QWORD PTR";
-        break;
-    }
-    default:
+    if (sz != 1 && sz != 2 && sz != 4 && sz != 8) {
         fprintf(stderr, "codegen: unsupported type size %d\n", sz);
         abort();
     }
 
-    return size_info;
+    return SIZE_CLASSES[sz];
 }
 
 // Codegen frame layout calculation
