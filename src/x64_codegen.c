@@ -188,59 +188,37 @@ static void x64_emit_epilogue(FILE *out) {
 }
 
 static void x64_emit_div_or_mod(FILE *out, const FrameLayout *fl,
-                                const IrFunc *fn, const IrInst *inst,
-                                int is_mod) {
-    TypeId t      = inst->type;
-    int sz        = cg_type_size(t);
-    int is_signed = cg_type_is_signed(t);
+                                const IrInst *inst, int is_mod) {
+    TypeId t              = inst->type;
+    int is_signed         = cg_type_is_signed(t);
 
-    int div_sz    = (sz <= 4) ? 4 : 8;
+    int off_dst           = stack_offset_for_value(fl, inst->dst);
+    int off_src0          = stack_offset_for_value(fl, inst->src0);
+    int off_src1          = stack_offset_for_value(fl, inst->src1);
 
-    int off_dst   = stack_offset_for_value(fl, inst->dst);
-    int off0      = stack_offset_for_value(fl, inst->src0);
-    int off1      = stack_offset_for_value(fl, inst->src1);
+    bool wide             = (cg_type_size(t) > 4);
+    const char *acc       = wide ? "rax" : "eax";
+    const char *remainder = wide ? "rdx" : "edx";
+    const char *div_mem   = wide ? "QWORD PTR" : "DWORD PTR";
+    const char *sext      = wide ? "cqo" : "cdq";
 
-    if (div_sz == 4) {
-        const char *div_mem = "DWORD PTR";
+    fprintf(out, "    mov %s, %s [rbp%+d]\n", acc, div_mem, off_src0);
+    if (is_signed) {
+        fprintf(out, "    %s\n", sext); // sign-extend
+        fprintf(out, "    idiv %s [rbp%+d]\n", div_mem, off_src1);
+    } else {
+        fprintf(out, "    xor %s, %s\n", remainder, remainder);
+        fprintf(out, "    div %s [rbp%+d]\n", div_mem, off_src1);
+    }
 
-        // Load dividend into EAX
-        fprintf(out, "    mov eax, %s [rbp%+d]\n", div_mem, off0);
-
-        if (is_signed) {
-            fprintf(out, "    cdq\n"); // sign-extend eax -> edx:eax
-            fprintf(out, "    idiv %s [rbp%+d]\n", div_mem, off1);
-        } else {
-            fprintf(out, "    xor edx, edx\n");
-            fprintf(out, "    div %s [rbp%+d]\n", div_mem, off1);
-        }
-
-        // Now quotient in EAX, remainder in EDX (32-bit)
-        CgSizeInfo size_info = cg_size_info(t);
-        if (is_mod) {
-            fprintf(out, "    mov %s [rbp%+d], edx\n", size_info.mem, off_dst);
-        } else {
-            fprintf(out, "    mov %s [rbp%+d], eax\n", size_info.mem, off_dst);
-        }
-    } else { // div_sz == 8
-        const char *div_mem = "QWORD PTR";
-
-        fprintf(out, "    mov rax, %s [rbp%+d]\n", div_mem, off0);
-
-        if (is_signed) {
-            fprintf(out, "    cqo\n"); // sign-extend rax -> rdx:rax
-            fprintf(out, "    idiv %s [rbp%+d]\n", div_mem, off1);
-        } else {
-            fprintf(out, "    xor rdx, rdx\n");
-            fprintf(out, "    div %s [rbp%+d]\n", div_mem, off1);
-        }
-
-        // quotient in RAX, remainder in RDX (64-bit)
-        CgSizeInfo size_info = cg_size_info(t);
-        if (is_mod) {
-            fprintf(out, "    mov %s [rbp%+d], rdx\n", size_info.mem, off_dst);
-        } else {
-            fprintf(out, "    mov %s [rbp%+d], rax\n", size_info.mem, off_dst);
-        }
+    // Now quotient in EAX (32-bit) or RAX (64-bit), remainder in EDX (32-bit)
+    // or RDX (64-bit)
+    CgSizeInfo size_info = cg_size_info(t);
+    if (is_mod) {
+        fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off_dst,
+                remainder);
+    } else {
+        fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off_dst, acc);
     }
 }
 
@@ -375,7 +353,7 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
 
     case IR_OP_DIV:
     case IR_OP_MOD: {
-        x64_emit_div_or_mod(out, fl, fn, inst, inst->op == IR_OP_MOD);
+        x64_emit_div_or_mod(out, fl, inst, inst->op == IR_OP_MOD);
         break;
     }
 
