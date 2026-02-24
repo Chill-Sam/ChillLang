@@ -252,6 +252,8 @@ static void x64_emit_div_or_mod(FILE *out, const FrameLayout *fl,
 
 // Handles SUB, MUL, AND, OR, XOR, LOGICAL_AND and LOGICAL_OR
 static const char *norm_binop_mnem(IrOp op) {
+    // LOGICAL_AND/LOGICAL_OR are the same as AND/OR since lowering guarantees
+    // bool types
     switch (op) {
     case IR_OP_SUB:
         return "sub";
@@ -289,6 +291,38 @@ static void x64_emit_norm_binop(FILE *out, const FrameLayout *fl,
     const char *mnem = norm_binop_mnem(inst->op);
     fprintf(out, "    %s %s, %s [rbp%+d]\n", mnem, size_info.reg, size_info.mem,
             off_src1);
+
+    fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off_dst,
+            size_info.reg);
+}
+
+// Handles NEG and BITNOT
+static const char *unary_mnem(IrOp op) {
+    switch (op) {
+    case IR_OP_NEG:
+        return "neg";
+    case IR_OP_BITNOT:
+        return "not";
+    default:
+        fprintf(stderr,
+                "codegen error: invalid operator %d given to unary_mnem\n", op);
+        abort();
+    }
+}
+
+static void x64_emit_unary_op(FILE *out, const FrameLayout *fl,
+                              const IrInst *inst) {
+    TypeId t             = inst->type;
+    CgSizeInfo size_info = cg_size_info(t);
+
+    int off_dst          = stack_offset_for_value(fl, inst->dst);
+    int off0             = stack_offset_for_value(fl, inst->src0);
+
+    fprintf(out, "    mov %s, %s [rbp%+d]\n", size_info.reg, size_info.mem,
+            off0);
+
+    const char *mnem = unary_mnem(inst->op);
+    fprintf(out, "    %s %s\n", mnem, size_info.reg);
 
     fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off_dst,
             size_info.reg);
@@ -437,28 +471,7 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
 
     case IR_OP_NEG:
     case IR_OP_BITNOT: {
-        TypeId t             = inst->type;
-        CgSizeInfo size_info = cg_size_info(t);
-
-        int off_dst          = stack_offset_for_value(fl, inst->dst);
-        int off0             = stack_offset_for_value(fl, inst->src0);
-
-        fprintf(out, "    mov %s, %s [rbp%+d]\n", size_info.reg, size_info.mem,
-                off0);
-        switch (inst->op) {
-        case IR_OP_NEG:
-            fprintf(out, "    neg %s\n", size_info.reg);
-            break;
-        case IR_OP_BITNOT:
-            fprintf(out, "    not %s\n", size_info.reg);
-            break;
-        default:
-            fprintf(stderr, "codegen error: unreachable code\n");
-            abort();
-        }
-
-        fprintf(out, "    mov %s [rbp%+d], %s\n", size_info.mem, off_dst,
-                size_info.reg);
+        x64_emit_unary_op(out, fl, inst);
         break;
     }
 
