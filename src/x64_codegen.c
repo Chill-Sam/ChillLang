@@ -3,10 +3,8 @@
 
 typedef struct FrameLayout {
     int frame_size;
-    int *data_offsets;
-    int *ptr_offsets;
-
-    bool *is_alloca;
+    int *alloca_data_off;
+    int *value_slot_off;
 } FrameLayout;
 
 typedef struct CgSizeInfo {
@@ -113,17 +111,16 @@ static int align_up(int x, int align) { return (x + align - 1) & ~(align - 1); }
 
 static FrameLayout cg_build_frame(const IrFunc *fn) {
     FrameLayout fl;
-    fl.data_offsets = malloc(fn->value_count * sizeof(int));
-    fl.ptr_offsets  = malloc(fn->value_count * sizeof(int));
-    fl.is_alloca    = calloc(fn->value_count, sizeof(bool));
-    if (!fl.data_offsets || !fl.ptr_offsets || !fl.is_alloca) {
+    fl.alloca_data_off = malloc(fn->value_count * sizeof(int));
+    fl.value_slot_off  = malloc(fn->value_count * sizeof(int));
+    if (!fl.alloca_data_off || !fl.value_slot_off) {
         fprintf(stderr, "oom in cg_build_frame\n");
         abort();
     }
 
     for (uint32_t i = 0; i < fn->value_count; i++) {
-        fl.data_offsets[i] = 0;
-        fl.ptr_offsets[i]  = 0;
+        fl.alloca_data_off[i] = 0;
+        fl.value_slot_off[i]  = 0;
     }
 
     int cur = 0; // distance from rbp downwards (positive)
@@ -138,24 +135,23 @@ static FrameLayout cg_build_frame(const IrFunc *fn) {
             int aln = cg_type_align(inst->type);
             cur     = align_up(cur, aln);
             cur += sz;
-            fl.data_offsets[inst->dst] = -cur; // rbp-relative
-            fl.is_alloca[inst->dst]    = true;
+            fl.alloca_data_off[inst->dst] = -cur; // rbp-relative
         }
     }
 
     for (uint32_t v = 0; v < fn->value_count; v++) {
-        int sz  = fl.is_alloca[v]
+        int sz  = fl.alloca_data_off[v] != 0
                       ? 8
                       : cg_type_size(fn->value_types ? fn->value_types[v]
                                                      : TYPEID_I64);
-        int aln = fl.is_alloca[v]
+        int aln = fl.alloca_data_off[v] != 0
                       ? 8
                       : cg_type_align(fn->value_types ? fn->value_types[v]
                                                       : TYPEID_I64);
 
         cur     = align_up(cur, aln);
         cur += sz;
-        fl.ptr_offsets[v] = -cur; // rbp-relative
+        fl.value_slot_off[v] = -cur; // rbp-relative
     }
 
     fl.frame_size = align_up(cur, 16);
@@ -163,16 +159,14 @@ static FrameLayout cg_build_frame(const IrFunc *fn) {
 }
 
 static void cg_free_frame(FrameLayout *fl) {
-    free(fl->data_offsets);
-    free(fl->ptr_offsets);
-    free(fl->is_alloca);
-    fl->data_offsets = NULL;
-    fl->ptr_offsets  = NULL;
-    fl->is_alloca    = NULL;
+    free(fl->alloca_data_off);
+    free(fl->value_slot_off);
+    fl->alloca_data_off = NULL;
+    fl->value_slot_off  = NULL;
 }
 
 static int stack_offset_for_value(const FrameLayout *fl, IrValue v) {
-    return fl->ptr_offsets[v];
+    return fl->value_slot_off[v];
 }
 
 static void x64_emit_prologue(FILE *out, const IrFunc *fn, int frame_size) {
@@ -520,8 +514,8 @@ static void x64_emit_inst(FILE *out, const IrFunc *fn, const FrameLayout *fl,
     }
 
     case IR_OP_ALLOCA: {
-        int data_off = fl->data_offsets[inst->dst];
-        int ptr_off  = fl->ptr_offsets[inst->dst];
+        int data_off = fl->alloca_data_off[inst->dst];
+        int ptr_off  = fl->value_slot_off[inst->dst];
         fprintf(out, "    lea rax, [rbp%+d]\n", data_off);
         fprintf(out, "    mov QWORD PTR [rbp%+d], rax\n", ptr_off);
         break;
