@@ -19,10 +19,10 @@ static const CgSizeInfo SIZE_CLASSES[] = {
     [8] = {.mem = "QWORD PTR", .reg = "rax"},
 };
 
-static const char *ARG_REGS_8[6] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
-static const char *ARG_REGS_4[6] = {"edi", "esi", "edx", "ecx", "r8d", "r9d"};
-static const char *ARG_REGS_2[6] = {"di", "si", "dx", "cx", "r8w", "r9w"};
-static const char *ARG_REGS_1[6] = {"dil", "sil", "dl", "cl", "r8b", "r9b"};
+static const char *ARG_REGS[4][6] = {{"dil", "sil", "dl", "cl", "r8b", "r9b"},
+                                     {"di", "si", "dx", "cx", "r8w", "r9w"},
+                                     {"edi", "esi", "edx", "ecx", "r8d", "r9d"},
+                                     {"rdi", "rsi", "rdx", "rcx", "r8", "r9"}};
 
 // ----- Codegen type helper functions -----
 static int cg_type_size(TypeId tid) {
@@ -61,21 +61,18 @@ static int cg_type_align(TypeId tid) {
     return 1;
 }
 
-static const char *cg_get_arg_reg(int arg_count, TypeId type) {
+static int cg_size_class(TypeId type) {
     int sz = cg_type_size(type);
-    switch (sz) {
-    case 1:
-        return ARG_REGS_1[arg_count];
-    case 2:
-        return ARG_REGS_2[arg_count];
-    case 4:
-        return ARG_REGS_4[arg_count];
-    case 8:
-        return ARG_REGS_8[arg_count];
-    default:
+    if (sz != 1 && sz != 2 && sz != 4 && sz != 8) {
         fprintf(stderr, "codegen: unsupported type size %d\n", sz);
         abort();
     }
+
+    return __builtin_ctz(sz);
+}
+
+static const char *cg_get_arg_reg(int arg_count, TypeId type) {
+    return ARG_REGS[cg_size_class(type)][arg_count];
 }
 
 // Calculate size information for a type.
