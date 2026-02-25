@@ -90,6 +90,8 @@ for (mut i32 i = 0; i < 10; i = i + 1) {
 
 Integer and float literals support explicit suffixes: `42i32`, `3.14f64`, etc.
 
+**NOTE:** Floats are not supported yet!
+
 ### Operators
 
 - **Arithmetic:** `+`, `-`, `*`, `/`, `%`
