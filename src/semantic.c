@@ -441,16 +441,27 @@ static TypeId sema_expr_assign(Scope *scope, AstNode *expr) {
         lhs_type = sym->as.var.type_id;
         lhs_mut  = sym->as.var.is_mut;
     } else if (assign->lhs->kind == AST_MEMBER_EXPR) {
-        lhs_type = sema_expr_member(scope, assign->lhs);
-        lhs_mut  = true;
+        lhs_type      = sema_expr_member(scope, assign->lhs);
+        AstNode *base = assign->lhs;
+        while (base->kind == AST_MEMBER_EXPR)
+            base = base->as.member_expr.base;
+        if (base->kind == AST_IDENT_EXPR) {
+            Token *name_tok = &base->as.ident_expr.name;
+            char *name      = token_to_cstr(name_tok);
+            Symbol *sym     = scope_lookup(scope, name);
+            free(name);
+            lhs_mut = sym && sym->kind == SYM_VAR && sym->as.var.is_mut;
+        }
     } else {
         sema_fatal(NULL,
                    "internal error: unknown left-hand side of assignment");
     }
 
     if (!lhs_mut) {
-        sema_fatal(&assign->lhs->as.ident_expr.name,
-                   "cannot assign to immutable");
+        Token *err_tok = assign->lhs->kind == AST_MEMBER_EXPR
+                             ? &assign->lhs->as.member_expr.field
+                             : &assign->lhs->as.ident_expr.name;
+        sema_fatal(err_tok, "cannot assign to immutable");
     }
 
     TypeId rhs_type = sema_expr(scope, assign->rhs);
