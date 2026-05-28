@@ -802,7 +802,9 @@ static void sema_func(AstNode *fn) {
         free(name);
     }
 
-    sema_block(fn_scope, func->body);
+    if (!func->is_extern) {
+        sema_block(fn_scope, func->body);
+    }
 
     ctx.return_type = TYPEID_VOID;
     scope_destroy(fn_scope);

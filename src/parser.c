@@ -70,7 +70,7 @@ static AstNode *parse_type_spec(Parser *p) {
 
 // Forward declarations
 static AstNode *parse_block(Parser *p);
-static AstNode *parse_func_decl(Parser *p);
+static AstNode *parse_func_decl(Parser *p, bool is_extern);
 static AstNode *parse_struct_decl(Parser *p);
 static AstNode *parse_stmt(Parser *p);
 static AstNode *parse_expr(Parser *p);
@@ -84,9 +84,12 @@ AstNode *parse_translation_unit(Parser *p) {
 
         // TODO: Allow top-level varaible declarations
         if (p->cur.kind == TOK_KW_FUN) {
-            item = parse_func_decl(p);
+            item = parse_func_decl(p, false);
         } else if (p->cur.kind == TOK_KW_STRUCT) {
             item = parse_struct_decl(p);
+        } else if (p->cur.kind == TOK_KW_EXTERN) {
+            expect(p, TOK_KW_EXTERN, "expected 'extern' keyword");
+            item = parse_func_decl(p, true);
         } else {
             // TODO: Hook into diagnostic system
             fprintf(
@@ -142,22 +145,24 @@ static AstNode *parse_params(Parser *p, AstNode *fn) {
     return fn;
 }
 
-static AstNode *parse_func_decl(Parser *p) {
+static AstNode *parse_func_decl(Parser *p, bool is_extern) {
     expect(p, TOK_KW_FUN, "expected 'fun' keyword");
 
     Token name = expect(p, TOK_IDENT, "expected function name");
 
-    // Create new function node
     AstNode *fn                  = new_node(AST_FUNC_DECL);
     fn->as.func_decl.name        = name;
     fn->as.func_decl.return_type = NULL;
     fn->as.func_decl.body        = NULL;
+    fn->as.func_decl.is_extern   = is_extern;
     ast_list_init(&fn->as.func_decl.params);
 
     parse_params(p, fn);
 
     fn->as.func_decl.return_type =
-        p->cur.kind == TOK_LBRACE
+        (is_extern && p->cur.kind == TOK_SEMI)
+            ? NULL
+        : p->cur.kind == TOK_LBRACE
             ? make_ident_node((Token){.kind   = TOK_IDENT,
                                       .offset = p->cur.offset,
                                       .length = 4,
@@ -165,6 +170,12 @@ static AstNode *parse_func_decl(Parser *p) {
                                       .column = p->cur.column,
                                       "void"})
             : parse_type_spec(p);
+
+    if (is_extern) {
+        expect(p, TOK_SEMI, "expected ';' after extern declaration");
+        return fn;
+    }
+
     fn->as.func_decl.body = parse_block(p);
 
     return fn;

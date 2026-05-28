@@ -572,7 +572,7 @@ static void rename_block(IrFunc *fn, VarAnalysis *analysis, IrBlock *block,
              phi         = phi->next) {
             int var_id = find_var_for_alloca(analysis, phi->imm);
 
-            if (var_id >= 0) {
+            if (var_id >= 0 && state->stack_depths[var_id] > 0) {
                 IrValue current_def       = top_def(state, var_id);
                 phi->phi.values[pred_idx] = current_def;
             }
@@ -655,6 +655,8 @@ void phi_elimination_pass(IrFunc *fn) {
             for (int i = 0; i < phi_count; i++) {
                 IrInst *phi       = phis[i];
                 IrValue src_value = phi->phi.values[p];
+                if (src_value == IR_VALUE_NONE)
+                    continue;
                 IrInst *copy1 =
                     create_copy_inst(fn, phi->dst, src_value, phi->type);
                 insert_before(terminator, copy1);

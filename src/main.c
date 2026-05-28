@@ -6,14 +6,15 @@
 #include "parser.h"
 #include "semantic.h"
 #include "x64_codegen.h"
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define PATH_MAX 64
+#define CHC_CMD_MAX 16384
 
 static void usage(const char *prog) {
-    fprintf(stderr, "Usage: %s <source.chl> -o <output>\n", prog);
+    fprintf(stderr, "Usage: %s <source.chl> [file.o ...] -o <output>\n", prog);
     exit(1);
 }
 
@@ -86,22 +87,39 @@ int main(int argc, char **argv) {
 
     const char *input_path  = NULL;
     const char *output_path = NULL;
+    char        link_extras[CHC_CMD_MAX] = {0};
+    size_t      extras_len = 0;
 
-    input_path              = argv[1];
-
-    for (int i = 2; i < argc; i++) {
-        if (strcmp(argv[i], "-o") == 0) {
-            if (i + 1 >= argc) {
-                usage(argv[0]);
+    for (int i = 1; i < argc; i++) {
+        const char *arg = argv[i];
+        if (strcmp(arg, "-o") == 0) {
+            if (i + 1 >= argc) usage(argv[0]);
+            output_path = argv[++i];
+        } else if (arg[0] != '-') {
+            size_t len = strlen(arg);
+            bool is_chl = len > 4 && strcmp(arg + len - 4, ".chl") == 0;
+            bool is_obj = len > 2 && strcmp(arg + len - 2, ".o") == 0;
+            if (is_chl) {
+                if (input_path) {
+                    fprintf(stderr, "error: multiple .chl inputs not yet supported\n");
+                    exit(1);
+                }
+                input_path = arg;
+            } else if (is_obj) {
+                int n = snprintf(link_extras + extras_len,
+                                 sizeof(link_extras) - extras_len,
+                                 " \"%s\"", arg);
+                if (n > 0) extras_len += (size_t)n;
+            } else {
+                fprintf(stderr, "error: unknown input file type: '%s'\n", arg);
+                exit(1);
             }
-            output_path = argv[i + 1];
-            i++;
         } else {
             usage(argv[0]);
         }
     }
 
-    if (!output_path) {
+    if (!input_path || !output_path) {
         usage(argv[0]);
     }
 
@@ -203,9 +221,22 @@ int main(int argc, char **argv) {
     x64_emit_module(asmf, mod);
     fclose(asmf);
 
-    char cmd[PATH_MAX * 2];
-    n = snprintf(cmd, sizeof(cmd), "gcc -masm=intel -no-pie \"%s\" -o \"%s\"",
-                 asm_path, output_path);
+    char cmd[CHC_CMD_MAX];
+    size_t out_len    = strlen(output_path);
+    bool compile_only = out_len >= 2 &&
+                        output_path[out_len - 2] == '.' &&
+                        output_path[out_len - 1] == 'o';
+    if (compile_only) {
+        if (extras_len > 0)
+            fprintf(stderr, "warning: link inputs ignored when output is .o\n");
+        n = snprintf(cmd, sizeof(cmd),
+                     "gcc -masm=intel -no-pie -c \"%s\" -o \"%s\"",
+                     asm_path, output_path);
+    } else {
+        n = snprintf(cmd, sizeof(cmd),
+                     "gcc -masm=intel -no-pie \"%s\"%s -o \"%s\"",
+                     asm_path, link_extras, output_path);
+    }
     if (n < 0 || (size_t)n >= sizeof(cmd)) {
         fprintf(stderr, "error: output command too long\n");
         cleanup(lx, root, mod, src);

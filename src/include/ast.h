@@ -57,6 +57,7 @@ typedef struct AstFuncDecl {
     AstNodeList params;   // AST_PARAM nodes
     AstNode *return_type; // TODO: parse later, NULL = void
     AstNode *body;        // AST_BLOCK_STMT
+    bool is_extern;
 } AstFuncDecl;
 
 typedef struct AstField {

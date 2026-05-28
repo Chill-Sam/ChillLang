@@ -1042,7 +1042,9 @@ static IrFunc lower_func(AstNode *fn) {
         free(pname);
     }
 
-    lower_block(&b, scope, fd->body);
+    if (!fd->is_extern) {
+        lower_block(&b, scope, fd->body);
+    }
 
     lscope_free(scope);
     return ir_fn;
@@ -1067,7 +1069,7 @@ IrModule *lower_to_ir(AstNode *tu) {
     AstNodeList *items = &tu->as.translation_unit.items;
     for (uint32_t i = 0; i < items->count; i++) {
         AstNode *it = items->items[i];
-        if (it->kind == AST_FUNC_DECL) {
+        if (it->kind == AST_FUNC_DECL && !it->as.func_decl.is_extern) {
             IrFunc fn = lower_func(it);
             ir_module_add_func(m, fn);
         } else {

@@ -57,6 +57,7 @@ typedef enum TokenKind {
     TOK_KW_FALSE,
     TOK_KW_BREAK,
     TOK_KW_CONTINUE,
+    TOK_KW_EXTERN,
 
     // operators / punctuation
     TOK_PLUS,    // +
@@ -164,6 +165,8 @@ static const char *token_kind_name(TokenKind k) {
         return "KW_OR";
     case TOK_KW_NOT:
         return "KW_NOT";
+    case TOK_KW_EXTERN:
+        return "KW_EXTERN";
 
     case TOK_PLUS:
         return "PLUS";
